@@ -1,20 +1,3 @@
-// Foundation/URLSession/URLSessionConfiguration.swift - URLSession Configuration
-//
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-// -----------------------------------------------------------------------------
-///
-/// URLSession API code.
-/// - SeeAlso: URLSession.swift
-///
-// -----------------------------------------------------------------------------
-
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
 import SwiftFoundation
 #else
@@ -35,6 +18,8 @@ import Foundation
 ///
 /// A background session can be used to perform networking operations
 /// on behalf of a suspended application, within certain constraints.
+
+// 可以看到, 这就是一个纯数据类, 没有一点方法.
 open class URLSessionConfiguration : NSObject, NSCopying {
     // -init is silently incorrect in URLSessionCofiguration on the desktop. Ensure code that relied on swift-corelibs-foundation's init() being functional is redirected to the appropriate cross-platform class property.
     @available(*, deprecated, message: "Use .default instead.", renamed: "URLSessionConfiguration.default")

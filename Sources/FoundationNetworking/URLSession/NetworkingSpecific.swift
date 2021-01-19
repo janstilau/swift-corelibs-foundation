@@ -19,6 +19,7 @@ internal func NSUnimplemented(_ fn: String = #function, file: StaticString = #fi
     fatalError("\(fn) is not yet implemented", file: file, line: line)
 }
 
+// 就是抛出异常了. 
 internal func NSUnsupported(_ fn: String = #function, file: StaticString = #file, line: UInt = #line) -> Never {
     #if os(Android)
     NSLog("\(fn) is not supported. \(file):\(line)")

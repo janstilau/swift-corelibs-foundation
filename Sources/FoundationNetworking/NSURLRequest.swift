@@ -1,12 +1,3 @@
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
 import SwiftFoundation
 #else
@@ -96,53 +87,52 @@ extension NSURLRequest {
     }
 }
 
-/// An `NSURLRequest` object represents a URL load request in a
-/// manner independent of protocol and URL scheme.
-///
-/// `NSURLRequest` encapsulates basic data elements about a URL load request.
-///
-/// In addition, `NSURLRequest` is designed to be extended to support
-/// protocol-specific data by adding categories to access a property
-/// object provided in an interface targeted at protocol implementors.
-///
-/// Protocol implementors should direct their attention to the
-/// `NSURLRequestExtensibility` category on `NSURLRequest` for more
-/// information on how to provide extensions on `NSURLRequest` to
-/// support protocol-specific request information.
-///
-/// Clients of this API who wish to create `NSURLRequest` objects to
-/// load URL content should consult the protocol-specific `NSURLRequest`
-/// categories that are available. The `NSHTTPURLRequest` category on
-/// `NSURLRequest` is an example.
-///
-/// Objects of this class are used with the `URLSession` API to perform the
-/// load of a URL.
 open class NSURLRequest : NSObject, NSSecureCoding, NSCopying, NSMutableCopying {
     
     open override func copy() -> Any {
         return copy(with: nil)
     }
     
+    // NSCopying 里面, 限制的方法, 还是 withZone 的.
+    // 所以, 这里提供了一个简便 copy, 去除了 zone 的传入.
     open func copy(with zone: NSZone? = nil) -> Any {
+        // 如果, 就是 NSURLRequest, 那么不可变对象, 可以直接返回.
         if type(of: self) === NSURLRequest.self {
             // Already immutable
             return self
         }
-        let c = NSURLRequest(url: url!)
+        let c = NSURLRequest(url: url!) //生成一个新的对象, 然后通过私有方法进行初始化工作.
         c.setValues(from: self)
         return c
     }
     
+    // mutableCopy, 就是生成可变版本的类.
+    open override func mutableCopy() -> Any {
+        return mutableCopy(with: nil)
+    }
+    
+    open func mutableCopy(with zone: NSZone? = nil) -> Any {
+        let c = NSMutableURLRequest(url: url!)
+        c.setValues(from: self)
+        return c
+    }
+    
+    // 默认, 使用 useProtocolCachePolicy, 60 秒超时.
+    // copy 协议, 感觉应该放到 extension 中去, 难道是因为里面使用了 setValues
+    // 感觉还是 init 方法, 应该放到最上面.
     public convenience init(url: URL) {
         self.init(url: url, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 60.0)
     }
     
+    // 最原始的, 就是 url, policy, cachePolicy 这些值.
     public init(url: URL, cachePolicy: NSURLRequest.CachePolicy, timeoutInterval: TimeInterval) {
         self.url = url.absoluteURL
         self.cachePolicy = cachePolicy
         self.timeoutInterval = timeoutInterval
     }
     
+    // Copy 的话, 就是那所有的值, 都要进行一次 copy
+    // 可以看到, 在源码里面, 也有大量的 self 的使用. 不是应该进行少用吗????
     private func setValues(from source: NSURLRequest) {
         self.url = source.url
         self.mainDocumentURL = source.mainDocumentURL
@@ -157,16 +147,7 @@ open class NSURLRequest : NSObject, NSSecureCoding, NSCopying, NSMutableCopying 
         self.httpShouldUsePipelining = source.httpShouldUsePipelining
     }
     
-    open override func mutableCopy() -> Any {
-        return mutableCopy(with: nil)
-    }
-    
-    open func mutableCopy(with zone: NSZone? = nil) -> Any {
-        let c = NSMutableURLRequest(url: url!)
-        c.setValues(from: self)
-        return c
-    }
-    
+    // 还是纯 OC 的协议的方式. 因为这个协议, 其实是 OC 的协议.
     public required init?(coder aDecoder: NSCoder) {
         guard aDecoder.allowsKeyedCoding else {
             preconditionFailure("Unkeyed coding is unsupported.")
@@ -174,13 +155,18 @@ open class NSURLRequest : NSObject, NSSecureCoding, NSCopying, NSMutableCopying 
 
         super.init()
         
+        // 所有的, 都增加可选值绑定.
         if let encodedURL = aDecoder.decodeObject(forKey: "NS.url") as? NSURL {
             self.url = encodedURL as URL
         }
         
         if let encodedHeaders = aDecoder.decodeObject(forKey: "NS._allHTTPHeaderFields") as? NSDictionary {
             self.allHTTPHeaderFields = encodedHeaders.reduce([String : String]()) { result, item in
+                // 首先, 显式地, 把参数变为可变的.
+                // 因为 swift 里面, 参数是不可变的, 但是, 通过这种方式, 也能让参数可变.
+                // 参数不可变, 有的时候, 专门在去定义一个变量, 其实算是污染了代码.
                 var result = result
+                // 这里, 不太明白, 为什么这么多转化???
                 if let key = item.key as? NSString,
                     let value = item.value as? NSString {
                     result[key as String] = value as String
@@ -198,6 +184,8 @@ open class NSURLRequest : NSObject, NSSecureCoding, NSCopying, NSMutableCopying 
         }
         
         let encodedCachePolicy = aDecoder.decodeObject(forKey: "NS._cachePolicy") as! NSNumber
+        // 这里, 拿到了 number 值, 然是为了得到的是 CachePolicy 值, 专门调用了 CachePolicy 的初始化方法.
+        // 这其实是, 用类型代替原始值的一次使用.
         self.cachePolicy = CachePolicy(rawValue: encodedCachePolicy.uintValue)!
         
         let encodedTimeout = aDecoder.decodeObject(forKey: "NS._timeoutInterval") as! NSNumber
@@ -225,6 +213,9 @@ open class NSURLRequest : NSObject, NSSecureCoding, NSCopying, NSMutableCopying 
         self.httpShouldUsePipelining = encodedUsePipelining.boolValue
     }
     
+    // 为什么, 上面都是 as NS 的类, 就是因为 encode 的时候, 都调用了 _bridgeToObjectiveC 的代码
+    // 我猜测是, 这是为了兼容之前 OC 的数据, 因为 OC 就是 NS 的类的存储.
+    // 所以 decode 的时候, 就还是 NS 的类. 既然 decode 的时候, 还是原来的数据, 那么这个类, encode 的时候, 就得是用 OC 的版本.
     open func encode(with aCoder: NSCoder) {
         guard aCoder.allowsKeyedCoding else {
             preconditionFailure("Unkeyed coding is unsupported.")
@@ -247,6 +238,7 @@ open class NSURLRequest : NSObject, NSSecureCoding, NSCopying, NSMutableCopying 
         aCoder.encode(self.httpShouldUsePipelining._bridgeToObjectiveC(), forKey: "NS._httpShouldUsePipelining")
     }
     
+    // 这里, 都是用的 ==, 因为 OC 版本的类, 只是序列化的过程中, 到了内存里面, 还是 Swift 版本的对象.
     open override func isEqual(_ object: Any?) -> Bool {
         //On macOS this fields do not determine the result:
         //allHTTPHeaderFields
@@ -279,6 +271,7 @@ open class NSURLRequest : NSObject, NSSecureCoding, NSCopying, NSMutableCopying 
     /// Indicates that NSURLRequest implements the NSSecureCoding protocol.
     open class  var supportsSecureCoding: Bool { return true }
     
+    // 数据部分, 不明白, 为什么不写到最开始的位置.
     /// The URL of the receiver.
     /*@NSCopying */open fileprivate(set) var url: URL?
     
@@ -295,6 +288,7 @@ open class NSURLRequest : NSObject, NSSecureCoding, NSCopying, NSMutableCopying 
     internal var _httpMethod: String? = "GET"
 
     /// Returns the HTTP request method of the receiver.
+    /// 这里, 之所以要变为计算属性, 是因为 get 的时候一定要有值. 所以 set 的时候, 要做处理.
     open fileprivate(set) var httpMethod: String? {
         get { return _httpMethod }
         set { _httpMethod = NSURLRequest._normalized(newValue) }
@@ -317,6 +311,7 @@ open class NSURLRequest : NSObject, NSSecureCoding, NSCopying, NSMutableCopying 
     
     /// A dictionary containing all the HTTP header fields
     /// of the receiver.
+    /// 因为, Http 是一个纯文办的协议, 所以这里就是 [String: String] 了
     open internal(set) var allHTTPHeaderFields: [String : String]? = nil
     
     /// Returns the value which corresponds to the given header field.
@@ -332,12 +327,15 @@ open class NSURLRequest : NSObject, NSSecureCoding, NSCopying, NSMutableCopying 
         return existingHeaderField(field, inHeaderFields: f)?.1
     }
     
+    // 这里, 就带来了 Enum 的好处, 就是将数据的可变性降低了. 不会同时出现, Data, inputStream 都存在的情况. Enum 的关联值的特性, 将数据划分为不同的区域, 不会交叉.
     internal enum Body {
         case data(Data)
         case stream(InputStream)
     }
+    // 私有的, 还是应该加 _body, 公开的, 就应该不加.
     internal var _body: Body?
     
+    // 这两个方法应该有 set 方法, set 方法, 会修改 _body 的 enum 类型, 填充关联值.
     open var httpBody: Data? {
         if let body = _body {
             switch body {
@@ -362,6 +360,7 @@ open class NSURLRequest : NSObject, NSSecureCoding, NSCopying, NSMutableCopying 
         return nil
     }
     
+    // 对于, 这些纯数据的, 直接就是成员属性就可以了.
     open internal(set) var networkServiceType: NetworkServiceType = .default
     
     open internal(set) var allowsCellularAccess: Bool = true
@@ -403,6 +402,7 @@ open class NSURLRequest : NSObject, NSSecureCoding, NSCopying, NSMutableCopying 
 /// `NSMutableHTTPURLRequest` category on `NSMutableURLRequest` is an
 /// example.
 open class NSMutableURLRequest : NSURLRequest {
+    // 数据部分, 其实还是使用的 NSURLRequest 的. 仅仅是, 这里提供了 可变的接口.
     public required init?(coder aDecoder: NSCoder) {
         super.init(coder: aDecoder)
     }
@@ -415,6 +415,8 @@ open class NSMutableURLRequest : NSURLRequest {
         super.init(url: url, cachePolicy: cachePolicy, timeoutInterval: timeoutInterval)
     }
     
+    // 这里, 使用了 MutableCopy.
+    // 一个可变对象 copy, 还是可变对象.
     open override func copy(with zone: NSZone? = nil) -> Any {
         return mutableCopy(with: zone)
     }
@@ -515,6 +517,7 @@ open class NSMutableURLRequest : NSURLRequest {
             }
             return nil
         }
+        // 不可变类, 不提供 set 方法.
         set {
             if let value = newValue {
                 _body = Body.data(value)
@@ -536,6 +539,7 @@ open class NSMutableURLRequest : NSURLRequest {
             }
             return nil
         }
+        // 不可变类, 不提供 set 方法.
         set {
             if let value = newValue {
                 _body = Body.stream(value)
@@ -569,7 +573,7 @@ open class NSMutableURLRequest : NSURLRequest {
     var protocolProperties: [String: Any] = [:]
 }
 
-/// Returns an existing key-value pair inside the header fields if it exists.
+// 这里, 不太明白为什么这么写, 直接 hash 查找不应该更快一点吗.
 private func existingHeaderField(_ key: String, inHeaderFields fields: [String : String]) -> (String, String)? {
     for (k, v) in fields {
         if k.lowercased() == key.lowercased() {

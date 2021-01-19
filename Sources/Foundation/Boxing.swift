@@ -1,15 +1,3 @@
-//===----------------------------------------------------------------------===//
-//
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-//===----------------------------------------------------------------------===//
-
 #if NS_BUILDING_FOUNDATION_NETWORKING
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
 import SwiftFoundation
@@ -22,6 +10,7 @@ import Foundation
 ///
 /// Note: This assumes that the result of calling copy() is mutable. The documentation says that classes which do not have a mutable/immutable distinction should just adopt NSCopying instead of NSMutableCopying.
 internal final class _MutableHandle<MutableType : NSObject> where MutableType : NSCopying {
+    
     @usableFromInline internal var _pointer : MutableType
     
     init(reference : MutableType) {
@@ -33,6 +22,7 @@ internal final class _MutableHandle<MutableType : NSObject> where MutableType : 
     }
     
     /// Apply a closure to the reference type.
+    // Swift 的方法, 太难看了. 一点也不 clean.
     func map<ReturnType>(_ whatToDo : (MutableType) throws -> ReturnType) rethrows -> ReturnType {
         return try whatToDo(_pointer)
     }
