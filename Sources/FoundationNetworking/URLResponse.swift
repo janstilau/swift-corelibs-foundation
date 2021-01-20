@@ -1,12 +1,3 @@
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
 import SwiftFoundation
 #else
@@ -21,17 +12,22 @@ import Foundation
 /// the actual bytes representing the content of a URL. See
 /// `URLSession` for more information about receiving the content
 /// data for a URL load.
+// 这里非常重要, Response 和 data 是分开的.
 open class URLResponse : NSObject, NSSecureCoding, NSCopying {
-
+    
     static public var supportsSecureCoding: Bool {
         return true
     }
     
     public required init?(coder aDecoder: NSCoder) {
+        // 目前, 都是使用了 keyCoding 的方式. 通过 key 来设置, 获取 value.
+        // 那种通过二进制的排列顺序来 coding 的方式, 已经是没人使用了.
         guard aDecoder.allowsKeyedCoding else {
             preconditionFailure("Unkeyed coding is unsupported.")
         }
         
+        // 所有的, 还是按照 NSURL 的进行存储的.
+        // 然后转换成为了 Swift 的相关的类型.
         guard let nsurl = aDecoder.decodeObject(of: NSURL.self, forKey: "NS.url") else { return nil }
         self.url = nsurl as URL
         
@@ -67,206 +63,15 @@ open class URLResponse : NSObject, NSSecureCoding, NSCopying {
         return copy(with: nil)
     }
     
+    // 不可变, 直接返回 This
     open func copy(with zone: NSZone? = nil) -> Any {
         return self
     }
     
-    /// Initialize an URLResponse with the provided values.
-    ///
-    /// This is the designated initializer for URLResponse.
-    /// - Parameter URL: the URL
-    /// - Parameter mimeType: the MIME content type of the response
-    /// - Parameter expectedContentLength: the expected content length of the associated data
-    /// - Parameter textEncodingName the name of the text encoding for the associated data, if applicable, else nil
-    /// - Returns: The initialized URLResponse.
-    public init(url: URL, mimeType: String?, expectedContentLength length: Int, textEncodingName name: String?) {
-        self.url = url
-        self.mimeType = mimeType
-        self.expectedContentLength = Int64(length)
-        self.textEncodingName = name
-        let c = url.lastPathComponent
-        self.suggestedFilename = c.isEmpty ? "Unknown" : c
-    }
-    
-    /// The URL of the receiver.
-    /*@NSCopying*/ open private(set) var url: URL?
-
-    
-    /// The MIME type of the receiver.
-    ///
-    /// The MIME type is based on the information provided
-    /// from an origin source. However, that value may be changed or
-    /// corrected by a protocol implementation if it can be determined
-    /// that the origin server or source reported the information
-    /// incorrectly or imprecisely. An attempt to guess the MIME type may
-    /// be made if the origin source did not report any such information.
-    open fileprivate(set) var mimeType: String?
-    
-    /// The expected content length of the receiver.
-    ///
-    /// Some protocol implementations report a content length
-    /// as part of delivering load metadata, but not all protocols
-    /// guarantee the amount of data that will be delivered in actuality.
-    /// Hence, this method returns an expected amount. Clients should use
-    /// this value as an advisory, and should be prepared to deal with
-    /// either more or less data.
-    ///
-    /// The expected content length of the receiver, or `-1` if
-    /// there is no expectation that can be arrived at regarding expected
-    /// content length.
-    open fileprivate(set) var expectedContentLength: Int64
-    
-    /// The name of the text encoding of the receiver.
-    ///
-    /// This name will be the actual string reported by the
-    /// origin source during the course of performing a protocol-specific
-    /// URL load. Clients can inspect this string and convert it to an
-    /// NSStringEncoding or CFStringEncoding using the methods and
-    /// functions made available in the appropriate framework.
-    open fileprivate(set) var textEncodingName: String?
-    
-    /// A suggested filename if the resource were saved to disk.
-    ///
-    /// The method first checks if the server has specified a filename
-    /// using the content disposition header. If no valid filename is
-    /// specified using that mechanism, this method checks the last path
-    /// component of the URL. If no valid filename can be obtained using
-    /// the last path component, this method uses the URL's host as the
-    /// filename. If the URL's host can't be converted to a valid
-    /// filename, the filename "unknown" is used. In mose cases, this
-    /// method appends the proper file extension based on the MIME type.
-    ///
-    /// This method always returns a valid filename.
-    open fileprivate(set) var suggestedFilename: String?
-
-    open override func isEqual(_ value: Any?) -> Bool {
-        switch value {
-        case let other as URLResponse:
-            return self.isEqual(to: other)
-        default:
-            return false
-        }
-    }
-
-    private func isEqual(to other: URLResponse) -> Bool {
-        if self === other {
-            return true
-        }
-
-        return self.url == other.url &&
-                self.expectedContentLength == other.expectedContentLength &&
-                self.mimeType == other.mimeType &&
-                self.textEncodingName == other.textEncodingName
-    }
-
-    open override var hash: Int {
-        var hasher = Hasher()
-        hasher.combine(url)
-        hasher.combine(expectedContentLength)
-        hasher.combine(mimeType)
-        hasher.combine(textEncodingName)
-        return hasher.finalize()
-    }
-}
-
-/// A Response to an HTTP URL load.
-///
-/// An HTTPURLResponse object represents a response to an
-/// HTTP URL load. It is a specialization of URLResponse which
-/// provides conveniences for accessing information specific to HTTP
-/// protocol responses.
-open class HTTPURLResponse : URLResponse {
-    
-    /// Initializer for HTTPURLResponse objects.
-    ///
-    /// - Parameter url: the URL from which the response was generated.
-    /// - Parameter statusCode: an HTTP status code.
-    /// - Parameter httpVersion: The version of the HTTP response as represented by the server.  This is typically represented as "HTTP/1.1".
-    /// - Parameter headerFields: A dictionary representing the header keys and values of the server response.
-    /// - Returns: the instance of the object, or `nil` if an error occurred during initialization.
-    public init?(url: URL, statusCode: Int, httpVersion: String?, headerFields: [String : String]?) {
-        self.statusCode = statusCode
-
-        self._allHeaderFields = {
-            // Canonicalize the header fields by capitalizing the field names, but not X- Headers
-            // This matches the behaviour of Darwin.
-            guard let headerFields = headerFields else { return [:] }
-            var canonicalizedFields: [String: String] = [:]
-
-            for (key, value) in headerFields  {
-                if key.isEmpty { continue }
-                if key.hasPrefix("x-") || key.hasPrefix("X-") {
-                    canonicalizedFields[key] = value
-                } else if key.caseInsensitiveCompare("WWW-Authenticate") == .orderedSame {
-                    canonicalizedFields["WWW-Authenticate"] = value
-                } else {
-                    canonicalizedFields[key.capitalized] = value
-                }
-            }
-            return canonicalizedFields
-        }()
-
-        super.init(url: url, mimeType: nil, expectedContentLength: 0, textEncodingName: nil)
-        expectedContentLength = getExpectedContentLength(fromHeaderFields: headerFields) ?? -1
-        suggestedFilename = getSuggestedFilename(fromHeaderFields: headerFields) ?? "Unknown"
-        if let type = ContentTypeComponents(headerFields: headerFields) {
-            mimeType = type.mimeType.lowercased()
-            textEncodingName = type.textEncoding?.lowercased()
-        }
-    }
-    
-    public required init?(coder aDecoder: NSCoder) {
-        guard aDecoder.allowsKeyedCoding else {
-            preconditionFailure("Unkeyed coding is unsupported.")
-        }
-        
-        self.statusCode = aDecoder.decodeInteger(forKey: "NS.statusCode")
-        
-        if aDecoder.containsValue(forKey: "NS.allHeaderFields") {
-            self._allHeaderFields = aDecoder.decodeObject(of: NSDictionary.self, forKey: "NS.allHeaderFields") as! [String: String]
-        } else {
-            self._allHeaderFields = [:]
-        }
-        
-        super.init(coder: aDecoder)
-    }
-    
-    open override func encode(with aCoder: NSCoder) {
-        super.encode(with: aCoder) //Will fail if .allowsKeyedCoding == false
-        
-        aCoder.encode(self.statusCode, forKey: "NS.statusCode")
-        aCoder.encode(self.allHeaderFields as NSDictionary, forKey: "NS.allHeaderFields")
-        
-    }
-    
-    /// The HTTP status code of the receiver.
-    public let statusCode: Int
-    
-    /// Returns a dictionary containing all the HTTP header fields
-    /// of the receiver.
-    ///
-    /// By examining this header dictionary, clients can see
-    /// the "raw" header information which was reported to the protocol
-    /// implementation by the HTTP server. This may be of use to
-    /// sophisticated or special-purpose HTTP clients.
-    ///
-    /// - Returns: A dictionary containing all the HTTP header fields of the
-    /// receiver.
-    ///
-    /// - Important: This is an *experimental* change from the
-    /// `[NSObject: AnyObject]` type that Darwin Foundation uses.
-    private let _allHeaderFields: [String: String]
-    public var allHeaderFields: [AnyHashable : Any] {
-        _allHeaderFields as [AnyHashable : Any]
-    }
-
-    public func value(forHTTPHeaderField field: String) -> String? {
-        return valueForCaseInsensitiveKey(field, fields: _allHeaderFields)
-    }
-
     /// Convenience method which returns a localized string
     /// corresponding to the status code for this response.
     /// - Parameter forStatusCode: the status code to use to produce a localized string.
+    // 这个方法, 应该移到最上面, 和其他的方法没有任何联系, 但是占据了他们解析的空间了.
     open class func localizedString(forStatusCode statusCode: Int) -> String {
         switch statusCode {
         case 100: return "Continue"
@@ -336,10 +141,222 @@ open class HTTPURLResponse : URLResponse {
         default: return "Server Error"
         }
     }
+    
+    /// Initialize an URLResponse with the provided values.
+    ///
+    /// This is the designated initializer for URLResponse.
+    /// - Parameter URL: the URL
+    /// - Parameter mimeType: the MIME content type of the response
+    /// - Parameter expectedContentLength: the expected content length of the associated data
+    /// - Parameter textEncodingName the name of the text encoding for the associated data, if applicable, else nil
+    /// - Returns: The initialized URLResponse.
+    
+    public init(url: URL, mimeType: String?, expectedContentLength length: Int, textEncodingName name: String?) {
+        self.url = url
+        self.mimeType = mimeType
+        self.expectedContentLength = Int64(length)
+        self.textEncodingName = name
+        let c = url.lastPathComponent
+        self.suggestedFilename = c.isEmpty ? "Unknown" : c
+    }
+    
+    // 不让改, 保持了值语义. 注意, 这个对象是 class. 所以是引用值
+    /// The URL of the receiver.
+    /*@NSCopying*/ open private(set) var url: URL?
+    
+    
+    /// The MIME type of the receiver.
+    ///
+    /// The MIME type is based on the information provided
+    /// from an origin source. However, that value may be changed or
+    /// corrected by a protocol implementation if it can be determined
+    /// that the origin server or source reported the information
+    /// incorrectly or imprecisely. An attempt to guess the MIME type may
+    /// be made if the origin source did not report any such information.
+    open fileprivate(set) var mimeType: String?
+    
+    /// The expected content length of the receiver.
+    ///
+    /// Some protocol implementations report a content length
+    /// as part of delivering load metadata, but not all protocols
+    /// guarantee the amount of data that will be delivered in actuality.
+    /// Hence, this method returns an expected amount. Clients should use
+    /// this value as an advisory, and should be prepared to deal with
+    /// either more or less data.
+    ///
+    /// The expected content length of the receiver, or `-1` if
+    /// there is no expectation that can be arrived at regarding expected
+    /// content length.
+    open fileprivate(set) var expectedContentLength: Int64
+    
+    /// The name of the text encoding of the receiver.
+    ///
+    /// This name will be the actual string reported by the
+    /// origin source during the course of performing a protocol-specific
+    /// URL load. Clients can inspect this string and convert it to an
+    /// NSStringEncoding or CFStringEncoding using the methods and
+    /// functions made available in the appropriate framework.
+    open fileprivate(set) var textEncodingName: String?
+    
+    /// A suggested filename if the resource were saved to disk.
+    ///
+    /// The method first checks if the server has specified a filename
+    /// using the content disposition header. If no valid filename is
+    /// specified using that mechanism, this method checks the last path
+    /// component of the URL. If no valid filename can be obtained using
+    /// the last path component, this method uses the URL's host as the
+    /// filename. If the URL's host can't be converted to a valid
+    /// filename, the filename "unknown" is used. In mose cases, this
+    /// method appends the proper file extension based on the MIME type.
+    ///
+    /// This method always returns a valid filename.
+    open fileprivate(set) var suggestedFilename: String?
+    
+    open override func isEqual(_ value: Any?) -> Bool {
+        switch value {
+        case let other as URLResponse:
+            return self.isEqual(to: other)
+        default:
+            return false
+        }
+    }
+    
+    // 如果
+    private func isEqual(to other: URLResponse) -> Bool {
+        if self === other {
+            return true
+        }
+        
+        return self.url == other.url &&
+            self.expectedContentLength == other.expectedContentLength &&
+            self.mimeType == other.mimeType &&
+            self.textEncodingName == other.textEncodingName
+    }
+    
+    // 这里, 可以去看一下侯捷的实现, Hasher 相当于是一个, 统一的根据二进制数据计算 hash 的类.
+    open override var hash: Int {
+        var hasher = Hasher()
+        hasher.combine(url)
+        hasher.combine(expectedContentLength)
+        hasher.combine(mimeType)
+        hasher.combine(textEncodingName)
+        return hasher.finalize()
+    }
+}
 
+/// A Response to an HTTP URL load.
+///
+/// An HTTPURLResponse object represents a response to an
+/// HTTP URL load. It is a specialization of URLResponse which
+/// provides conveniences for accessing information specific to HTTP
+/// protocol responses.
+// URLResponse 里面的信息太少了, HTTPURLResponse 里面, 存储了和 Http 相关的逻辑.
+open class HTTPURLResponse : URLResponse {
+    
+    /// Initializer for HTTPURLResponse objects.
+    ///
+    /// - Parameter url: the URL from which the response was generated.
+    /// - Parameter statusCode: an HTTP status code.
+    /// - Parameter httpVersion: The version of the HTTP response as represented by the server.  This is typically represented as "HTTP/1.1".
+    /// - Parameter headerFields: A dictionary representing the header keys and values of the server response.
+    /// - Returns: the instance of the object, or `nil` if an error occurred during initialization.
+    // url, code, version, 是响应头的第一行的信息, 其他的, 是剩下几行的, 可以用 keyvalue 对应的信息.
+    public init?(url: URL, statusCode: Int, httpVersion: String?, headerFields: [String : String]?) {
+        self.statusCode = statusCode
+        
+        // 这种, {}() 的方式, 让定义方法的需求大大降低了.
+        // 有些方法, 仅仅是为了分化逻辑, 只会在父方法里面使用. 通过这种方式, 让这个方法, 内嵌到了内部.
+        // 并且, 因为是闭包的原因, 不会有参数的传递.
+        // 不过, 书写的时候, 应该尽量少引用, 方便之后可以快速拆出去.
+        self._allHeaderFields = {
+            // Canonicalize the header fields by capitalizing the field names, but not X- Headers
+            // This matches the behaviour of Darwin.
+            guard let headerFields = headerFields else { return [:] }
+            var canonicalizedFields: [String: String] = [:]
+            
+            // 具体的抽取的过程. 主要是 key 的名称的修改.
+            for (key, value) in headerFields  {
+                if key.isEmpty { continue }
+                if key.hasPrefix("x-") || key.hasPrefix("X-") {
+                    canonicalizedFields[key] = value
+                } else if key.caseInsensitiveCompare("WWW-Authenticate") == .orderedSame {
+                    canonicalizedFields["WWW-Authenticate"] = value
+                } else {
+                    canonicalizedFields[key.capitalized] = value
+                }
+            }
+            return canonicalizedFields
+        }()
+        
+        // 前面的, 先把引入的值初始化, 然后调用父类的, 然后修改父类的, 这是 Swift 的初始化策略.
+        super.init(url: url, mimeType: nil, expectedContentLength: 0, textEncodingName: nil)
+        
+        // 之前的, 使用 {}() 的方式, 现在, 又使用子函数的形式, 不统一.
+        // 之前, 是不能使用子函数的形式, 这是 swfit init 的限制. 可见, 还是用子函数要好一点, 更加清晰.
+        expectedContentLength = getExpectedContentLength(fromHeaderFields: headerFields) ?? -1
+        suggestedFilename = getSuggestedFilename(fromHeaderFields: headerFields) ?? "Unknown"
+        // 解析的过程, 被包装到了 ContentTypeComponents 的构造方法内了, 然后直接读取构造出来的对象的数据.
+        if let type = ContentTypeComponents(headerFields: headerFields) {
+            mimeType = type.mimeType.lowercased()
+            textEncodingName = type.textEncoding?.lowercased()
+        }
+    }
+    
+    public required init?(coder aDecoder: NSCoder) {
+        guard aDecoder.allowsKeyedCoding else {
+            preconditionFailure("Unkeyed coding is unsupported.")
+        }
+        
+        // coder 的这种方式, 也是先解析自己引入的数据, 然后调用父类的方法
+        self.statusCode = aDecoder.decodeInteger(forKey: "NS.statusCode")
+        
+        if aDecoder.containsValue(forKey: "NS.allHeaderFields") {
+            self._allHeaderFields = aDecoder.decodeObject(of: NSDictionary.self, forKey: "NS.allHeaderFields") as! [String: String]
+        } else {
+            self._allHeaderFields = [:]
+        }
+        
+        super.init(coder: aDecoder)
+    }
+    
+    open override func encode(with aCoder: NSCoder) {
+        super.encode(with: aCoder) //Will fail if .allowsKeyedCoding == false
+        
+        // 先 encode 父类的, 然后自己的.
+        aCoder.encode(self.statusCode, forKey: "NS.statusCode")
+        aCoder.encode(self.allHeaderFields as NSDictionary, forKey: "NS.allHeaderFields")
+        
+    }
+    
+    /// The HTTP status code of the receiver.
+    public let statusCode: Int
+    
+    /// Returns a dictionary containing all the HTTP header fields
+    /// of the receiver.
+    ///
+    /// By examining this header dictionary, clients can see
+    /// the "raw" header information which was reported to the protocol
+    /// implementation by the HTTP server. This may be of use to
+    /// sophisticated or special-purpose HTTP clients.
+    ///
+    /// - Returns: A dictionary containing all the HTTP header fields of the
+    /// receiver.
+    ///
+    /// - Important: This is an *experimental* change from the
+    /// `[NSObject: AnyObject]` type that Darwin Foundation uses.
+    private let _allHeaderFields: [String: String]
+    public var allHeaderFields: [AnyHashable : Any] {
+        _allHeaderFields as [AnyHashable : Any]
+    }
+    
+    public func value(forHTTPHeaderField field: String) -> String? {
+        return valueForCaseInsensitiveKey(field, fields: _allHeaderFields)
+    }
+    
     /// A string that represents the contents of the HTTPURLResponse Object.
     /// This property is intended to produce readable output.
     override open var description: String {
+        // Unmanaged.passUnretained(self).toOpaque(), 这个返回地址.
         var result = "<\(type(of: self)) \(Unmanaged.passUnretained(self).toOpaque())> { URL: \(url!.absoluteString) }{ status: \(statusCode), headers {\n"
         for key in _allHeaderFields.keys.sorted() {
             guard let value = _allHeaderFields[key] else { continue }
@@ -361,12 +378,13 @@ open class HTTPURLResponse : URLResponse {
 /// The transfer length can only be derived when the Transfer-Encoding is identity (default).
 /// For compressed content (Content-Encoding other than identity), there is not way to derive the
 /// content length from the transfer length.
+// 就是获取特定的 key 的 value. HTTPResponse 把这个逻辑包装了.
 private func getExpectedContentLength(fromHeaderFields headerFields: [String : String]?) -> Int64? {
     guard
         let f = headerFields,
         let contentLengthS = valueForCaseInsensitiveKey("content-length", fields: f),
         let contentLength = Int64(contentLengthS)
-        else { return nil }
+    else { return nil }
     return contentLength
 }
 /// Parses the suggested filename from the `Content-Disposition` header.
@@ -375,11 +393,13 @@ private func getExpectedContentLength(fromHeaderFields headerFields: [String : S
 private func getSuggestedFilename(fromHeaderFields headerFields: [String : String]?) -> String? {
     // Typical use looks like this:
     //     Content-Disposition: attachment; filename="fname.ext"
+    // 多使用, 少使用 && 符号. 这是 swift 的写法.
     guard
         let f = headerFields,
         let contentDisposition = valueForCaseInsensitiveKey("content-disposition", fields: f),
         let field = contentDisposition.httpHeaderParts
-        else { return nil }
+    else { return nil }
+    
     for part in field.parameters where part.attribute == "filename" {
         if let path = part.value {
             return (path as NSString).pathComponents.map{ $0 == "/" ? "" : $0}.joined(separator: "_")
@@ -389,6 +409,8 @@ private func getSuggestedFilename(fromHeaderFields headerFields: [String : Strin
     }
     return nil
 }
+
+// 一个特殊的类型, 它的目的, 主要是想把解析 Content-Type 的过程, 封装到自己的内部.
 /// Parts corresponding to the `Content-Type` header field in a HTTP message.
 private struct ContentTypeComponents {
     /// For `text/html; charset=ISO-8859-4` this would be `text/html`
@@ -397,17 +419,21 @@ private struct ContentTypeComponents {
     /// `nil` when no `charset` is specified.
     let textEncoding: String?
 }
+
+// 类里面, 仅仅是数据的定义, 实现的部分, 在 extension 里面.
+
 extension ContentTypeComponents {
     /// Parses the `Content-Type` header field
     ///
     /// `Content-Type: text/html; charset=ISO-8859-4` would result in `("text/html", "ISO-8859-4")`, while
     /// `Content-Type: text/html` would result in `("text/html", nil)`.
     init?(headerFields: [String : String]?) {
+        // 连贯的过程, 在 Swift 里面, 用 , 代替了.
         guard
             let f = headerFields,
             let contentType = valueForCaseInsensitiveKey("content-type", fields: f),
             let field = contentType.httpHeaderParts
-            else { return nil }
+        else { return nil }
         for parameter in field.parameters where parameter.attribute == "charset" {
             self.mimeType = field.value
             self.textEncoding = parameter.value
@@ -432,15 +458,20 @@ extension ContentTypeComponents {
 /// attribute               = token
 /// value                   = token | quoted-string
 /// ```
+// 一个特殊的类型, 只在这个文件里使用,
 private struct ValueWithParameters {
-    let value: String
-    let parameters: [Parameter]
     struct Parameter {
         let attribute: String
         let value: String?
     }
+    let value: String
+    let parameters: [Parameter]
 }
 
+// 通过, String 生成. 可以在类内部, 专门写一个 参数是 string, 返回值是 ValueWithParameters 的函数.
+// 但是, string 更加倾向于扩展的方式.
+// `Content-Type: text/html; charset=ISO-8859-4` would result in `("text/html", "ISO-8859-4")`, while
+// `Content-Type: text/html` would result in `("text/html", nil)`.
 private extension String {
     /// Split the string at each ";", remove any quoting.
     /// 
@@ -451,6 +482,8 @@ private extension String {
         var type: String?
         var parameters: [ValueWithParameters.Parameter] = []
         let ws = CharacterSet.whitespaces
+        
+        // 函数内定义方法, 这是一个闭包, 直接修改了外界的值.
         func append(_ string: String) {
             if type == nil {
                 type = string
@@ -466,17 +499,28 @@ private extension String {
             }
         }
         
-        let escape = UnicodeScalar(0x5c)!    //  \
-        let quote = UnicodeScalar(0x22)!     //  "
-        let separator = UnicodeScalar(0x3b)! //  ;
+        
+        //------前面是数据部分, 下面是解析部分------//
+        // 这种代码管理的方式真的好吗 ???
+        
         enum State {
             case nonQuoted(String)
             case nonQuotedEscaped(String)
             case quoted(String)
             case quotedEscaped(String)
         }
+        
+        // 特殊的变量, 先定义出来.
+        let escape = UnicodeScalar(0x5c)!    //  \
+        let quote = UnicodeScalar(0x22)!     //  "
+        let separator = UnicodeScalar(0x3b)! //  ;
+        
         var state = State.nonQuoted("")
         for next in unicodeScalars {
+            // next 就是字符, state 是上次设置状态.
+            // for 循环不断的取值, 然后根据状态和 next 的值, 进行后续的操作.
+            // 状态里面的 s, 是目前已经拼接的值.
+            // 通过 switch 这种方式, 让代码很简练.
             switch (state, next) {
             case (.nonQuoted(let s), separator):
                 append(s)
@@ -497,22 +541,26 @@ private extension String {
                 state = .quotedEscaped(s + String(next))
             case (.quoted(let s), _):
                 state = .quoted(s + String(next))
-            
+                
             case (.quotedEscaped(let s), _):
                 state = .quoted(s + String(next))
             }
         }
         switch state {
-            case .nonQuoted(let s): append(s)
-            case .nonQuotedEscaped(let s): append(s)
-            case .quoted(let s): append(s)
-            case .quotedEscaped(let s): append(s)
+        case .nonQuoted(let s): append(s)
+        case .nonQuotedEscaped(let s): append(s)
+        case .quoted(let s): append(s)
+        case .quotedEscaped(let s): append(s)
         }
         guard let t = type else { return nil }
         return ValueWithParameters(value: t, parameters: parameters)
     }
 }
+
+// 虽然, 这里传递的是一个 struct, 但是我们知道, 其实里面是一个引用值.
+// 只要不改, 就没有效率问题.
 private func valueForCaseInsensitiveKey(_ key: String, fields: [String: String]) -> String? {
+    // kk, 这算好命名吗,
     let kk = key.lowercased()
     for (k, v) in fields {
         if k.lowercased() == kk {
