@@ -1,12 +1,3 @@
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
 import SwiftFoundation
 #else
@@ -21,23 +12,23 @@ internal extension NSLock {
 }
 
 /*!
-    @enum URLCache.StoragePolicy
-    
-    @discussion The URLCache.StoragePolicy enum defines constants that
-    can be used to specify the type of storage that is allowable for an
-    NSCachedURLResponse object that is to be stored in an URLCache.
-    
-    @constant URLCache.StoragePolicy.allowed Specifies that storage in an
-    URLCache is allowed without restriction.
-
-    @constant URLCache.StoragePolicy.allowedInMemoryOnly Specifies that
-    storage in an URLCache is allowed; however storage should be
-    done in memory only, no disk storage should be done.
-
-    @constant URLCache.StoragePolicy.notAllowed Specifies that storage in an
-    URLCache is not allowed in any fashion, either in memory or on
-    disk.
-*/
+ @enum URLCache.StoragePolicy
+ 
+ @discussion The URLCache.StoragePolicy enum defines constants that
+ can be used to specify the type of storage that is allowable for an
+ NSCachedURLResponse object that is to be stored in an URLCache.
+ 
+ @constant URLCache.StoragePolicy.allowed Specifies that storage in an
+ URLCache is allowed without restriction.
+ 
+ @constant URLCache.StoragePolicy.allowedInMemoryOnly Specifies that
+ storage in an URLCache is allowed; however storage should be
+ done in memory only, no disk storage should be done.
+ 
+ @constant URLCache.StoragePolicy.notAllowed Specifies that storage in an
+ URLCache is not allowed in any fashion, either in memory or on
+ disk.
+ */
 extension URLCache {
     public enum StoragePolicy : UInt {
         
@@ -61,9 +52,9 @@ class StoredCachedURLResponse: NSObject, NSSecureCoding {
     required init?(coder aDecoder: NSCoder) {
         guard let response = aDecoder.decodeObject(of: URLResponse.self, forKey: "response"),
               let data = aDecoder.decodeObject(of: NSData.self, forKey: "data"),
-            let storagePolicy = URLCache.StoragePolicy(rawValue: UInt(bitPattern: aDecoder.decodeInteger(forKey: "storagePolicy"))),
+              let storagePolicy = URLCache.StoragePolicy(rawValue: UInt(bitPattern: aDecoder.decodeInteger(forKey: "storagePolicy"))),
               let date = aDecoder.decodeObject(of: NSDate.self, forKey: "date") else {
-                return nil
+            return nil
         }
         
         let userInfo = aDecoder.decodeObject(of: NSDictionary.self, forKey: "userInfo") as? [AnyHashable: Any]
@@ -80,12 +71,12 @@ class StoredCachedURLResponse: NSObject, NSSecureCoding {
 }
 
 /*!
-    @class CachedURLResponse
-    CachedURLResponse is a class whose objects functions as a wrapper for
-    objects that are stored in the framework's caching system. 
-    It is used to maintain characteristics and attributes of a cached 
-    object. 
-*/
+ @class CachedURLResponse
+ CachedURLResponse is a class whose objects functions as a wrapper for
+ objects that are stored in the framework's caching system.
+ It is used to maintain characteristics and attributes of a cached
+ object.
+ */
 open class CachedURLResponse : NSObject, NSCopying {
     open override func copy() -> Any {
         return copy(with: nil)
@@ -94,19 +85,19 @@ open class CachedURLResponse : NSObject, NSCopying {
     open func copy(with zone: NSZone? = nil) -> Any {
         return self
     }
-
+    
     /*!
-        @method initWithResponse:data
-        @abstract Initializes an CachedURLResponse with the given
-        response and data.
-        @discussion A default URLCache.StoragePolicy is used for
-        CachedURLResponse objects initialized with this method:
-        URLCache.StoragePolicy.allowed.
-        @param response a URLResponse object.
-        @param data an Data object representing the URL content
-        corresponding to the given response.
-        @result an initialized CachedURLResponse.
-    */
+     @method initWithResponse:data
+     @abstract Initializes an CachedURLResponse with the given
+     response and data.
+     @discussion A default URLCache.StoragePolicy is used for
+     CachedURLResponse objects initialized with this method:
+     URLCache.StoragePolicy.allowed.
+     @param response a URLResponse object.
+     @param data an Data object representing the URL content
+     corresponding to the given response.
+     @result an initialized CachedURLResponse.
+     */
     public init(response: URLResponse, data: Data) {
         self.response = response.copy() as! URLResponse
         self.data = data
@@ -115,17 +106,17 @@ open class CachedURLResponse : NSObject, NSCopying {
     }
     
     /*! 
-        @method initWithResponse:data:userInfo:storagePolicy:
-        @abstract Initializes an NSCachedURLResponse with the given
-        response, data, user-info dictionary, and storage policy.
-        @param response a URLResponse object.
-        @param data an NSData object representing the URL content
-        corresponding to the given response.
-        @param userInfo a dictionary user-specified information to be
-        stored with the NSCachedURLResponse.
-        @param storagePolicy an URLCache.StoragePolicy constant.
-        @result an initialized CachedURLResponse.
-    */
+     @method initWithResponse:data:userInfo:storagePolicy:
+     @abstract Initializes an NSCachedURLResponse with the given
+     response, data, user-info dictionary, and storage policy.
+     @param response a URLResponse object.
+     @param data an NSData object representing the URL content
+     corresponding to the given response.
+     @param userInfo a dictionary user-specified information to be
+     stored with the NSCachedURLResponse.
+     @param storagePolicy an URLCache.StoragePolicy constant.
+     @result an initialized CachedURLResponse.
+     */
     public init(response: URLResponse, data: Data, userInfo: [AnyHashable : Any]? = nil, storagePolicy: URLCache.StoragePolicy) {
         self.response = response.copy() as! URLResponse
         self.data = data
@@ -134,33 +125,33 @@ open class CachedURLResponse : NSObject, NSCopying {
     }
     
     /*! 
-        @method response
-        @abstract Returns the response wrapped by this instance. 
-        @result The response wrapped by this instance. 
-    */
+     @method response
+     @abstract Returns the response wrapped by this instance.
+     @result The response wrapped by this instance.
+     */
     /*@NSCopying*/ open private(set) var response: URLResponse
     
     /*! 
-        @method data
-        @abstract Returns the data of the receiver. 
-        @result The data of the receiver. 
-    */
+     @method data
+     @abstract Returns the data of the receiver.
+     @result The data of the receiver.
+     */
     /*@NSCopying*/ open private(set) var data: Data
     
     /*! 
-        @method userInfo
-        @abstract Returns the userInfo dictionary of the receiver. 
-        @result The userInfo dictionary of the receiver. 
-    */
+     @method userInfo
+     @abstract Returns the userInfo dictionary of the receiver.
+     @result The userInfo dictionary of the receiver.
+     */
     open private(set) var userInfo: [AnyHashable : Any]?
     
     /*! 
-        @method storagePolicy
-        @abstract Returns the URLCache.StoragePolicy constant of the receiver.
-        @result The URLCache.StoragePolicy constant of the receiver.
-    */
+     @method storagePolicy
+     @abstract Returns the URLCache.StoragePolicy constant of the receiver.
+     @result The URLCache.StoragePolicy constant of the receiver.
+     */
     open private(set) var storagePolicy: URLCache.StoragePolicy
-
+    
     open override func isEqual(_ value: Any?) -> Bool {
         switch value {
         case let other as CachedURLResponse:
@@ -169,21 +160,21 @@ open class CachedURLResponse : NSObject, NSCopying {
             return false
         }
     }
-
+    
     private func isEqual(to other: CachedURLResponse) -> Bool {
         if self === other {
             return true
         }
-
+        
         // We cannot compare userInfo because of the values are Any, which
         // doesn't conform to Equatable.
         return self.response == other.response &&
-                self.data == other.data &&
-                self.storagePolicy == other.storagePolicy
+            self.data == other.data &&
+            self.storagePolicy == other.storagePolicy
     }
     
     internal fileprivate(set) var date: Date = Date()
-
+    
     open override var hash: Int {
         var hasher = Hasher()
         hasher.combine(response)
@@ -199,22 +190,22 @@ open class URLCache : NSObject {
     private static var _shared: URLCache?
     
     /*! 
-        @method sharedURLCache
-        @abstract Returns the shared URLCache instance.
-        @discussion Unless set explicitly, this method returns an URLCache
-        instance created with the following default values:
-        <ul>
-        <li>Memory capacity: 4 megabytes (4 * 1024 * 1024 bytes)
-        <li>Disk capacity: 20 megabytes (20 * 1024 * 1024 bytes)
-        <li>Disk path: <nobr>(user home directory)/Library/Caches/(application bundle id)</nobr> 
-        </ul>
-        <p>Users who do not have special caching requirements or
-        constraints should find the default shared cache instance
-        acceptable. If this default shared cache instance is not
-        acceptable, the property can be set with a different URLCache
-        instance to be returned from this method.
-        @result the shared URLCache instance.
-    */
+     @method sharedURLCache
+     @abstract Returns the shared URLCache instance.
+     @discussion Unless set explicitly, this method returns an URLCache
+     instance created with the following default values:
+     <ul>
+     <li>Memory capacity: 4 megabytes (4 * 1024 * 1024 bytes)
+     <li>Disk capacity: 20 megabytes (20 * 1024 * 1024 bytes)
+     <li>Disk path: <nobr>(user home directory)/Library/Caches/(application bundle id)</nobr>
+     </ul>
+     <p>Users who do not have special caching requirements or
+     constraints should find the default shared cache instance
+     acceptable. If this default shared cache instance is not
+     acceptable, the property can be set with a different URLCache
+     instance to be returned from this method.
+     @result the shared URLCache instance.
+     */
     open class var shared: URLCache {
         get {
             return sharedLock.performLocked {
@@ -288,7 +279,7 @@ open class URLCache : NSObject {
         let sizes = entries.map { (entry) in
             (try? entry.url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         }
-
+        
         var totalSize = sizes.reduce(0, +)
         
         for (index, entry) in entries.enumerated() {
@@ -300,18 +291,18 @@ open class URLCache : NSObject {
     }
     
     /*! 
-        @method initWithMemoryCapacity:diskCapacity:diskPath:
-        @abstract Initializes an URLCache with the given capacity and
-        path.
-        @discussion The returned URLCache is backed by disk, so
-        developers can be more liberal with space when choosing the
-        capacity for this kind of cache. A disk cache measured in the tens
-        of megabytes should be acceptable in most cases.
-        @param capacity the capacity, measured in bytes, for the cache.
-        @param path the path on disk where the cache data is stored.
-        @result an initialized URLCache, with the given capacity, backed
-        by disk.
-    */
+     @method initWithMemoryCapacity:diskCapacity:diskPath:
+     @abstract Initializes an URLCache with the given capacity and
+     path.
+     @discussion The returned URLCache is backed by disk, so
+     developers can be more liberal with space when choosing the
+     capacity for this kind of cache. A disk cache measured in the tens
+     of megabytes should be acceptable in most cases.
+     @param capacity the capacity, measured in bytes, for the cache.
+     @param path the path on disk where the cache data is stored.
+     @result an initialized URLCache, with the given capacity, backed
+     by disk.
+     */
     public init(memoryCapacity: Int, diskCapacity: Int, diskPath path: String?) {
         self.memoryCapacity = memoryCapacity
         self.diskCapacity = diskCapacity
@@ -327,7 +318,7 @@ open class URLCache : NSObject {
                     .replacingOccurrences(of: "/", with: "_")
                     .replacingOccurrences(of: "\\", with: "_")
                     .replacingOccurrences(of: ":", with: "_")
-
+                
                 // We append a Swift Foundation identifier to avoid clobbering a Darwin cache that may exist at the same path;
                 // the two on-disk cache formats aren't compatible.
                 url = caches
@@ -362,7 +353,7 @@ open class URLCache : NSObject {
             data.append(0)
             data.append(Data(url.path.utf8))
             data.append(0)
-        
+            
             return data.base64EncodedString()
         } else {
             return nil
@@ -448,20 +439,20 @@ open class URLCache : NSObject {
     }
     
     /*! 
-        @method cachedResponseForRequest:
-        @abstract Returns the NSCachedURLResponse stored in the cache with
-        the given request.
-        @discussion The method returns nil if there is no
-        NSCachedURLResponse stored using the given request.
-        @param request the NSURLRequest to use as a key for the lookup.
-        @result The NSCachedURLResponse stored in the cache with the given
-        request, or nil if there is no NSCachedURLResponse stored with the
-        given request.
-    */
+     @method cachedResponseForRequest:
+     @abstract Returns the NSCachedURLResponse stored in the cache with
+     the given request.
+     @discussion The method returns nil if there is no
+     NSCachedURLResponse stored using the given request.
+     @param request the NSURLRequest to use as a key for the lookup.
+     @result The NSCachedURLResponse stored in the cache with the given
+     request, or nil if there is no NSCachedURLResponse stored with the
+     given request.
+     */
     open func cachedResponse(for request: URLRequest) -> CachedURLResponse? {
         let result = inMemoryCacheLock.performLocked { () -> CachedURLResponse? in
             if let identifier = identifier(for: request),
-                let entry = inMemoryCacheContents[identifier] {
+               let entry = inMemoryCacheContents[identifier] {
                 return entry.cachedURLResponse
             } else {
                 return nil
@@ -477,12 +468,12 @@ open class URLCache : NSObject {
     }
     
     /*! 
-        @method storeCachedResponse:forRequest:
-        @abstract Stores the given NSCachedURLResponse in the cache using
-        the given request.
-        @param cachedResponse The cached response to store.
-        @param request the NSURLRequest to use as a key for the storage.
-    */
+     @method storeCachedResponse:forRequest:
+     @abstract Stores the given NSCachedURLResponse in the cache using
+     the given request.
+     @param cachedResponse The cached response to store.
+     @param request the NSURLRequest to use as a key for the storage.
+     */
     open func storeCachedResponse(_ cachedResponse: CachedURLResponse, for request: URLRequest) {
         let inMemory = cachedResponse.storagePolicy == .allowed || cachedResponse.storagePolicy == .allowedInMemoryOnly
         let onDisk = cachedResponse.storagePolicy == .allowed
@@ -495,7 +486,7 @@ open class URLCache : NSObject {
         let serialized = (onDisk && diskCapacity > 0) ? try? NSKeyedArchiver.archivedData(withRootObject: object, requiringSecureCoding: true) : nil
         
         let entry = CacheEntry(identifier: identifier, cachedURLResponse: cachedResponse, serializedVersion: serialized)
-
+        
         if inMemory && entry.cost < memoryCapacity {
             inMemoryCacheLock.performLocked {
                 evictFromMemoryCacheAssumingLockHeld(maximumSize: memoryCapacity - entry.cost)
@@ -535,13 +526,13 @@ open class URLCache : NSObject {
     }
     
     /*! 
-        @method removeCachedResponseForRequest:
-        @abstract Removes the NSCachedURLResponse from the cache that is
-        stored using the given request. 
-        @discussion No action is taken if there is no NSCachedURLResponse
-        stored with the given request.
-        @param request the NSURLRequest to use as a key for the lookup.
-    */
+     @method removeCachedResponseForRequest:
+     @abstract Removes the NSCachedURLResponse from the cache that is
+     stored using the given request.
+     @discussion No action is taken if there is no NSCachedURLResponse
+     stored with the given request.
+     @param request the NSURLRequest to use as a key for the lookup.
+     */
     open func removeCachedResponse(for request: URLRequest) {
         guard let identifier = identifier(for: request) else { return }
         
@@ -558,10 +549,10 @@ open class URLCache : NSObject {
     }
     
     /*! 
-        @method removeAllCachedResponses
-        @abstract Clears the given cache, removing all NSCachedURLResponse
-        objects that it stores.
-    */
+     @method removeAllCachedResponses
+     @abstract Clears the given cache, removing all NSCachedURLResponse
+     objects that it stores.
+     */
     open func removeAllCachedResponses() {
         inMemoryCacheLock.performLocked {
             inMemoryCacheContents = [:]
@@ -602,11 +593,11 @@ open class URLCache : NSObject {
     }
     
     /*! 
-        @method memoryCapacity
-        @abstract In-memory capacity of the receiver. 
-        @discussion At the time this call is made, the in-memory cache will truncate its contents to the size given, if necessary.
-        @result The in-memory capacity, measured in bytes, for the receiver. 
-    */
+     @method memoryCapacity
+     @abstract In-memory capacity of the receiver.
+     @discussion At the time this call is made, the in-memory cache will truncate its contents to the size given, if necessary.
+     @result The in-memory capacity, measured in bytes, for the receiver.
+     */
     open var memoryCapacity: Int {
         didSet {
             inMemoryCacheLock.performLocked {
@@ -616,23 +607,23 @@ open class URLCache : NSObject {
     }
     
     /*! 
-        @method diskCapacity
-        @abstract The on-disk capacity of the receiver. 
-        @discussion At the time this call is made, the on-disk cache will truncate its contents to the size given, if necessary.
-        @param diskCapacity the new on-disk capacity, measured in bytes, for the receiver.
-    */
+     @method diskCapacity
+     @abstract The on-disk capacity of the receiver.
+     @discussion At the time this call is made, the on-disk cache will truncate its contents to the size given, if necessary.
+     @param diskCapacity the new on-disk capacity, measured in bytes, for the receiver.
+     */
     open var diskCapacity: Int {
         didSet { evictFromDiskCache(maximumSize: diskCapacity) }
     }
     
     /*! 
-        @method currentMemoryUsage
-        @abstract Returns the current amount of space consumed by the
-        in-memory cache of the receiver.
-        @discussion This size, measured in bytes, indicates the current
-        usage of the in-memory cache. 
-        @result the current usage of the in-memory cache of the receiver.
-    */
+     @method currentMemoryUsage
+     @abstract Returns the current amount of space consumed by the
+     in-memory cache of the receiver.
+     @discussion This size, measured in bytes, indicates the current
+     usage of the in-memory cache.
+     @result the current usage of the in-memory cache of the receiver.
+     */
     open var currentMemoryUsage: Int {
         return inMemoryCacheLock.performLocked {
             return inMemoryCacheContents.values.reduce(0) { (result, entry) in
@@ -642,13 +633,13 @@ open class URLCache : NSObject {
     }
     
     /*! 
-        @method currentDiskUsage
-        @abstract Returns the current amount of space consumed by the
-        on-disk cache of the receiver.
-        @discussion This size, measured in bytes, indicates the current
-        usage of the on-disk cache. 
-        @result the current usage of the on-disk cache of the receiver.
-    */
+     @method currentDiskUsage
+     @abstract Returns the current amount of space consumed by the
+     on-disk cache of the receiver.
+     @discussion This size, measured in bytes, indicates the current
+     usage of the on-disk cache.
+     @result the current usage of the on-disk cache of the receiver.
+     */
     open var currentDiskUsage: Int {
         var total = 0
         enumerateDiskEntries(includingPropertiesForKeys: [.fileSizeKey]) { (entry, stop) in
@@ -659,7 +650,7 @@ open class URLCache : NSObject {
         
         return total
     }
-
+    
     open func storeCachedResponse(_ cachedResponse: CachedURLResponse, for dataTask: URLSessionDataTask) {
         guard let request = dataTask.currentRequest else { return }
         storeCachedResponse(cachedResponse, for: request)

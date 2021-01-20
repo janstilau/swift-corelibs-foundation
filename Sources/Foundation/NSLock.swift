@@ -1,12 +1,3 @@
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2017 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-
 @_implementationOnly import CoreFoundation
 
 #if canImport(Glibc)
@@ -22,97 +13,49 @@ public protocol NSLocking {
     func unlock()
 }
 
-#if os(Windows)
-private typealias _MutexPointer = UnsafeMutablePointer<SRWLOCK>
-private typealias _RecursiveMutexPointer = UnsafeMutablePointer<CRITICAL_SECTION>
-private typealias _ConditionVariablePointer = UnsafeMutablePointer<CONDITION_VARIABLE>
-#elseif CYGWIN
-private typealias _MutexPointer = UnsafeMutablePointer<pthread_mutex_t?>
-private typealias _RecursiveMutexPointer = UnsafeMutablePointer<pthread_mutex_t?>
-private typealias _ConditionVariablePointer = UnsafeMutablePointer<pthread_cond_t?>
-#else
+// _RecursiveMutexPointer 和 _MutexPointer 的区别, 主要在于, mutext 初始化的时候, 属性的设置.
 private typealias _MutexPointer = UnsafeMutablePointer<pthread_mutex_t>
 private typealias _RecursiveMutexPointer = UnsafeMutablePointer<pthread_mutex_t>
 private typealias _ConditionVariablePointer = UnsafeMutablePointer<pthread_cond_t>
-#endif
 
 open class NSLock: NSObject, NSLocking {
     internal var mutex = _MutexPointer.allocate(capacity: 1)
-#if os(macOS) || os(iOS) || os(Windows)
     private var timeoutCond = _ConditionVariablePointer.allocate(capacity: 1)
     private var timeoutMutex = _MutexPointer.allocate(capacity: 1)
-#endif
 
     public override init() {
-#if os(Windows)
-        InitializeSRWLock(mutex)
-        InitializeConditionVariable(timeoutCond)
-        InitializeSRWLock(timeoutMutex)
-#else
+        // NSLock 控制的资源, 在 init 方法里面, 调用 C 方法, 进行初始化.
         pthread_mutex_init(mutex, nil)
-#if os(macOS) || os(iOS)
         pthread_cond_init(timeoutCond, nil)
         pthread_mutex_init(timeoutMutex, nil)
-#endif
-#endif
     }
     
     deinit {
-#if os(Windows)
-        // SRWLocks do not need to be explicitly destroyed
-#else
         pthread_mutex_destroy(mutex)
-#endif
-        mutex.deinitialize(count: 1)
-        mutex.deallocate()
-#if os(macOS) || os(iOS) || os(Windows)
+        mutex.deinitialize(count: 1) // deinitialize 调用对应位置的析构函数.
+        mutex.deallocate() // deallocate 是释放指针的内存.
         deallocateTimedLockData(cond: timeoutCond, mutex: timeoutMutex)
-#endif
     }
     
     open func lock() {
-#if os(Windows)
-        AcquireSRWLockExclusive(mutex)
-#else
         pthread_mutex_lock(mutex)
-#endif
     }
 
     open func unlock() {
-#if os(Windows)
-        ReleaseSRWLockExclusive(mutex)
-        AcquireSRWLockExclusive(timeoutMutex)
-        WakeAllConditionVariable(timeoutCond)
-        ReleaseSRWLockExclusive(timeoutMutex)
-#else
         pthread_mutex_unlock(mutex)
-#if os(macOS) || os(iOS)
-        // Wakeup any threads waiting in lock(before:)
         pthread_mutex_lock(timeoutMutex)
         pthread_cond_broadcast(timeoutCond)
         pthread_mutex_unlock(timeoutMutex)
-#endif
-#endif
     }
 
     open func `try`() -> Bool {
-#if os(Windows)
-        return TryAcquireSRWLockExclusive(mutex) != 0
-#else
         return pthread_mutex_trylock(mutex) == 0
-#endif
     }
     
     open func lock(before limit: Date) -> Bool {
-#if os(Windows)
-        if TryAcquireSRWLockExclusive(mutex) != 0 {
-          return true
-        }
-#else
         if pthread_mutex_trylock(mutex) == 0 {
             return true
         }
-#endif
 
 #if os(macOS) || os(iOS) || os(Windows)
         return timedLock(mutex: mutex, endTime: limit, using: timeoutCond, with: timeoutMutex)
@@ -127,6 +70,8 @@ open class NSLock: NSObject, NSLocking {
     open var name: String?
 }
 
+// 所谓的, Lock 的 synchronized, 就是加锁解锁的封装.
+// 而且, 根据传入的闭包, 返回对应的类型的值.
 extension NSLock {
     internal func synchronized<T>(_ closure: () -> T) -> T {
         self.lock()
@@ -432,19 +377,11 @@ private func timeSpecFrom(date: Date) -> timespec? {
 #if os(macOS) || os(iOS) || os(Windows)
 
 private func deallocateTimedLockData(cond: _ConditionVariablePointer, mutex: _MutexPointer) {
-#if os(Windows)
-    // CONDITION_VARIABLEs do not need to be explicitly destroyed
-#else
-    pthread_cond_destroy(cond)
-#endif
-    cond.deinitialize(count: 1)
+    pthread_cond_destroy(cond) // pthread_cond_destroy 会释放, cond 所管理的资源.
+    cond.deinitialize(count: 1) // 不太明白这里, cond 会触发什么, 应该是没有析构的调用
     cond.deallocate()
 
-#if os(Windows)
-    // SRWLOCKs do not need to be explicitly destroyed
-#else
     pthread_mutex_destroy(mutex)
-#endif
     mutex.deinitialize(count: 1)
     mutex.deallocate()
 }

@@ -1,27 +1,11 @@
-// Foundation/URLSession/Configuration.swift - URLSession & libcurl
-//
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-// -----------------------------------------------------------------------------
-///
-/// These are libcurl helpers for the URLSession API code.
-/// - SeeAlso: https://curl.haxx.se/libcurl/c/
-/// - SeeAlso: URLSession.swift
-///
-// -----------------------------------------------------------------------------
-
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
 import SwiftFoundation
 #else
 import Foundation
 #endif
 
+// 这是一个纯数据类.
+// 这里的实现, 应征了自己的猜想. configuration 类, 就是将各种 property 抽成了一个类. 这样, 逻辑类那里的逻辑, 可以变得清晰. 但是所有的需要读值的操作, 还是不可以少的.
 internal extension URLSession {
     /// This is an immutable / `struct` version of `URLSessionConfiguration`.
     struct _Configuration {
@@ -60,7 +44,6 @@ internal extension URLSession {
         
         /// Specifies additional headers which will be set on outgoing requests.
         /// Note that these headers are added to the request only if not already present.
-        
         let httpAdditionalHeaders: [String : String]?
         /// The maximum number of simultaneous persistent connections per host
         let httpMaximumConnectionsPerHost: Int

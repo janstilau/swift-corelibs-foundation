@@ -1,11 +1,3 @@
-///
-/// libcurl *multi handle* wrapper.
-/// These are libcurl helpers for the URLSession API code.
-/// - SeeAlso: https://curl.haxx.se/libcurl/c/
-/// - SeeAlso: URLSession.swift
-///
-// -----------------------------------------------------------------------------
-
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
 import SwiftFoundation
 #else

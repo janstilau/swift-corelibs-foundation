@@ -1,9 +1,7 @@
 /*
  
- URLSession is a replacement API for URLConnection.  It provides
- options that affect the policy of, and various aspects of the
- mechanism by which NSURLRequest objects are retrieved from the
- network.
+ 代理, 是一个类对外交互的接口.
+ session 对外暴露的接口, 就是被包装成了好几个 delegate 协议.
  
  An URLSession may be bound to a delegate object.  The delegate is
  invoked for certain events during the lifetime of a session, such as
@@ -12,32 +10,34 @@
  
  URLSession instances are threadsafe.
  
- The default URLSession uses a system provided delegate and is
- appropriate to use in place of existing code that uses
- +[NSURLConnection sendAsynchronousRequest:queue:completionHandler:]
- 
+ // URLSessionTask 作为了一次请求加载过程的抽象.
+ // 之前是 NSURLConnection, 所以, NSURLConnection 对标的是 URLSessionTask
+ // Session 更多的是整个网络请求的管理者, 而不是一个.
  An URLSession creates URLSessionTask objects which represent the
  action of a resource being loaded.  These are analogous to
  NSURLConnection objects but provide for more control and a unified
  delegate model.
  
+ // URLSessionTask 仅仅是一个数据创建的过程, 真正的启动网络, 要 resume, 先准备数据, 然后在启动.
  URLSessionTask objects are always created in a suspended state and
  must be sent the -resume message before they will execute.
  
- Subclasses of URLSessionTask are used to syntactically
- differentiate between data and file downloads.
+ URLSessionTask 有几个子类, 分别将, 上传, 下载, 内存 data 拼接的逻辑, 移交到了不同的对象里面.
  
+ // 内存里面存 data
  An URLSessionDataTask receives the resource as a series of calls to
  the URLSession:dataTask:didReceiveData: delegate method.  This is type of
  task most commonly associated with retrieving objects for immediate parsing
  by the consumer.
- 
+
+ // 上传大量数据的时候, 应该使用 upload 模型.
  An URLSessionUploadTask differs from an URLSessionDataTask
  in how its instance is constructed.  Upload tasks are explicitly created
  by referencing a file or data object to upload, or by utilizing the
  -URLSession:task:needNewBodyStream: delegate message to supply an upload
  body.
  
+ // 下载大量数据的时候, 存到文件里面.
  An URLSessionDownloadTask will directly write the response data to
  a temporary file.  When completed, the delegate is sent
  URLSession:downloadTask:didFinishDownloadingToURL: and given an opportunity
@@ -45,27 +45,12 @@
  otherwise read the file. If canceled, an URLSessionDownloadTask can
  produce a data blob that can be used to resume a download at a later
  time.
- 
- Beginning with iOS 9 and Mac OS X 10.11, URLSessionStream is
- available as a task type.  This allows for direct TCP/IP connection
- to a given host and port with optional secure handshaking and
- navigation of proxies.  Data tasks may also be upgraded to a
- URLSessionStream task via the HTTP Upgrade: header and appropriate
- use of the pipelining option of URLSessionConfiguration.  See RFC
- 2817 and RFC 6455 for information about the Upgrade: header, and
- comments below on turning data tasks into stream tasks.
  */
 
 /* DataTask objects receive the payload through zero or more delegate messages */
 /* UploadTask objects receive periodic progress updates but do not return a body */
 /* DownloadTask objects represent an active download to disk.  They can provide resume data when canceled. */
 /* StreamTask objects may be used to create NSInput and OutputStreams, or used directly in reading and writing. */
-
-/*
- 
- URLSession is not available for i386 targets before Mac OS X 10.10.
- 
- */
 
 
 // -----------------------------------------------------------------------------
@@ -82,14 +67,17 @@
 /// and adding it to the owning session’s *multi handle*. Adding / removing
 /// the handle effectively resumes / suspends the transfer.
 ///
+/// URLSessionTask 的可以隐藏 download, upload, data slice 的逻辑.
 /// The `URLSessionTask` class has subclasses, but this design puts all the
 /// logic into the parent `URLSessionTask`.
 ///
+/// 有着很好的类的设计, 使用了很多的内部类, 进行责任的划分.
 /// Both the `URLSession` and `URLSessionTask` extensively use helper
 /// types to ease testability, separate responsibilities, and improve
 /// readability. These types are nested inside the `URLSession` and
 /// `URLSessionTask` to limit their scope. Some of these even have sub-types.
 ///
+/// TaskRegistry 作为各个事件回调的追踪.
 /// The session class uses the `URLSession.TaskRegistry` to keep track of its
 /// tasks.
 ///
@@ -168,11 +156,13 @@ extension URLSession {
     }
 }
 
-fileprivate let globalVarSyncQ = DispatchQueue(label: "org.swift.Foundation.URLSession.GlobalVarSyncQ")
 
-fileprivate var sessionCounter = Int32(0)
-// sync, 通过闭包的返回值, 确定返回值类型.
+
+// Swift 大量使用了, 闭包确定返回值的技术. Void 能够被返回的好处.
+// 其实, 返回值, 在汇编层面上, 无非就是个存值取值的过程. 这是语言层面的设置.
 // 这种, 使用一个全局静态 Int 获取 Id 的方式, 是通用的.
+fileprivate let globalVarSyncQ = DispatchQueue(label: "org.swift.Foundation.URLSession.GlobalVarSyncQ")
+fileprivate var sessionCounter = Int32(0)
 fileprivate func nextSessionIdentifier() -> Int32 {
     return globalVarSyncQ.sync {
         sessionCounter += 1
@@ -185,9 +175,9 @@ public let NSURLSessionTransferSizeUnknown: Int64 = -1
 open class URLSession : NSObject {
     internal let _configuration: _Configuration
     fileprivate let multiHandle: _MultiHandle
-    fileprivate var nextTaskIdentifier = 1
+    fileprivate var nextTaskIdentifier = 1 // 就是一个 id 生成号.
     internal let workQueue: DispatchQueue 
-    internal let taskRegistry = URLSession._TaskRegistry()
+    internal let taskRegistry = URLSession._TaskRegistry() // 任务管理器. 里面存储了所有的 dataTask.
     fileprivate let identifier: Int32
     fileprivate var invalidated = false // 仅仅是一个 bool 值而已.
     fileprivate static let registerProtocols: () = {
@@ -213,16 +203,9 @@ open class URLSession : NSObject {
         return URLSession(configuration: configuration, delegate: nil, delegateQueue: nil)
     }()
 
-    /*
-     * Customization of URLSession occurs during creation of a new session.
-     * If you only need to use the convenience routines with custom
-     * configuration options it is not necessary to specify a delegate.
-     * If you do specify a delegate, the delegate will be retained until after
-     * the delegate has been sent the URLSession:didBecomeInvalidWithError: message.
-     */
     // 这里, delegate 会被 retain.
     // 然后在 sesion invaliad 的时候, 会释放.
-    public /*not inherited*/ init(configuration: URLSessionConfiguration) {
+    public init(configuration: URLSessionConfiguration) {
         initializeLibcurl()
         identifier = nextSessionIdentifier()
         self.workQueue = DispatchQueue(label: "URLSession<\(identifier)>")
@@ -231,9 +214,7 @@ open class URLSession : NSObject {
         self.delegateQueue = OperationQueue()
         self.delegateQueue.maxConcurrentOperationCount = 1
         self.delegate = nil
-        //TODO: Make sure this one can't be written to?
-        // Could create a subclass of URLSessionConfiguration that wraps the
-        // URLSession._Configuration and with fatalError() in all setters.
+        // copy, 去切割原有的联系, 不过这里, 还是使用 configuration, 生成了一个不可变的 _configuration.
         self.configuration = configuration.copy() as! URLSessionConfiguration
         let c = URLSession._Configuration(URLSessionConfiguration: configuration)
         self._configuration = c
@@ -249,34 +230,29 @@ open class URLSession : NSObject {
     public /*not inherited*/ init(configuration: URLSessionConfiguration, delegate: URLSessionDelegate?, delegateQueue queue: OperationQueue?) {
         initializeLibcurl()
         identifier = nextSessionIdentifier()
+        // DispatchQueue, 创建出来, 是一个串行队列.
         self.workQueue = DispatchQueue(label: "URLSession<\(identifier)>")
         if let _queue = queue {
+            // 没有对用户的进行检查, 如果是并行队列, 可能会有问题.
            self.delegateQueue = _queue
         } else {
            self.delegateQueue = OperationQueue()
            self.delegateQueue.maxConcurrentOperationCount = 1
         }
         self.delegate = delegate
-        //TODO: Make sure this one can't be written to?
-        // Could create a subclass of URLSessionConfiguration that wraps the
-        // URLSession._Configuration and with fatalError() in all setters.
         self.configuration = configuration.copy() as! URLSessionConfiguration
         let c = URLSession._Configuration(URLSessionConfiguration: configuration)
         self._configuration = c
         self.multiHandle = _MultiHandle(configuration: c, workQueue: workQueue)
-        // registering all the protocol classes with URLProtocol
         let _ = URLSession.registerProtocols
     }
     
-    // 没有把所有的数据部分, 写到一起. 而是分模块进行的. 下面的
+    // 没有把所有的数据部分, 写到一起. 现在不太清楚, swift 里面, 位置的规定有没有什么原则.
     open private(set) var delegateQueue: OperationQueue // 代理方法所在的位置.
     open private(set) var delegate: URLSessionDelegate? // 代理.
     open private(set) var configuration: URLSessionConfiguration
     
-    /*
-     * The sessionDescription property is available for the developer to
-     * provide a descriptive label for the session.
-     */
+    // 就是调试用的, 需要开发者主动去设置.
     open var sessionDescription: String?
     
     /* -finishTasksAndInvalidate returns immediately and existing tasks will be allowed
@@ -284,61 +260,65 @@ open class URLSession : NSObject {
      * will continue to make delegate callbacks until URLSession:didBecomeInvalidWithError:
      * has been issued.
      *
-     * -finishTasksAndInvalidate and -invalidateAndCancel do not
-     * have any effect on the shared session singleton.
-     *
      * When invalidating a background session, it is not safe to create another background
      * session with the same identifier until URLSession:didBecomeInvalidWithError: has
      * been issued.
      */
     open func finishTasksAndInvalidate() {
-       //we need to return immediately
+       // 把任务交给队列, 不等待任务执行完毕.
        workQueue.async {
-           //don't allow creation of new tasks from this point onwards
+        // 当 invalidated 为 true 的时候, 任何 dataTask 的创建, 都会报错.
            self.invalidated = true
-
            let invalidateSessionCallback = { [weak self] in
                //invoke the delegate method and break the delegate link
+            // 官方的代码, 也经常使用 strongSelf.
+            // 如果没有代理, 那么后面的操作就不用做了.
+            // 就是通知代理对象, session 结束了. 然后主动释放掉代理对象.
                guard let strongSelf = self, let sessionDelegate = strongSelf.delegate else { return }
+            // 在 代理的队列里面添加任务.
+            // 由于 iOS 大量使用了队列, 线程控制, 更加像是队列控制.
+            // 如果自己模拟的话, 应该就是线程, 不断的取队列的任务执行. 这个应该在 libDispatch 里面
                strongSelf.delegateQueue.addOperation {
                    sessionDelegate.urlSession(strongSelf, didBecomeInvalidWithError: nil)
                    strongSelf.delegate = nil
                }
            }
 
-           //wait for running tasks to finish
+        // taskRegistry 是dataTask 的存储器, 如果里面有值, 就等.
+        // 这里是吧闭包, 注册给 taskRegistry 的 finish 闭包.
+        // taskRegistry 有责任去调用.
            if !self.taskRegistry.isEmpty {
                self.taskRegistry.notify(on: invalidateSessionCallback)
+            // tasksFinishedCallback = tasksCompletion
            } else {
                invalidateSessionCallback()
            }
        }
     }
-    
+    // 在 Swift 的源码里面, self 也还是大量使用的.
     /* -invalidateAndCancel acts as -finishTasksAndInvalidate, but issues
      * -cancel to all outstanding tasks for this session.  Note task
      * cancellation is subject to the state of the task, and some tasks may
      * have already have completed at the time they are sent -cancel.
      */
     open func invalidateAndCancel() {
-        /*
-         As per documentation,
-         Calling this method on the session returned by the sharedSession method has no effect.
-         */
+        // 首先, 公用的不让瞎改.
         guard self !== URLSession.shared else { return }
         
+        // 本类的状态, 统一都在串行队列里面改.
+        // 不过, dataTask 的创建没有在里面啊. 仅仅是注册给 taskRegistry 的时候在了.
         workQueue.sync {
             self.invalidated = true
         }
-        
+        // 所有 task, 调用 cancel 方法.
         for task in taskRegistry.allTasks {
             task.cancel()
         }
         
         // Don't allow creation of new tasks from this point onwards
+        // 直接告诉代理, session 结束了, 切断 delegate 的联系.
         workQueue.async {
             guard let sessionDelegate = self.delegate else { return }
-            
             self.delegateQueue.addOperation {
                 sessionDelegate.urlSession(self, didBecomeInvalidWithError: nil)
                 self.delegate = nil
@@ -350,8 +330,12 @@ open class URLSession : NSObject {
     open func reset(completionHandler: @escaping () -> Void) {
         let configuration = self.configuration
         
+        // 在低优先级的线程, 做这个事情. 异步调用
         DispatchQueue.global(qos: .background).async {
+            // 显示 url cache 的清空.
             configuration.urlCache?.removeAllCachedResponses()
+            // 然后是 证书的清空.
+            // 没有 cookie ????
             if let storage = configuration.urlCredentialStorage {
                 for credentialEntry in storage.allCredentials {
                     for credential in credentialEntry.value {
@@ -365,6 +349,7 @@ open class URLSession : NSObject {
     }
     
      /* flush storage to disk and clear transient network caches.  Invokes completionHandler() on the delegate queue. */
+    // 这个函数, 还没有实现文档的要求.
     open func flush(completionHandler: @escaping () -> Void) {
         // We create new CURL handles every request.
         delegateQueue.addOperation {
@@ -378,16 +363,21 @@ open class URLSession : NSObject {
     }
 
     /* invokes completionHandler with outstanding data, upload and download tasks. */
+    // 一个闭包, 在 delegateQueue 中完成
+    // 逻辑是固定的, 然后通过闭包的形式, 进行业务的配置.
     open func getTasksWithCompletionHandler(_ completionHandler: @escaping ([URLSessionDataTask], [URLSessionUploadTask], [URLSessionDownloadTask]) -> Void)  {
         workQueue.async {
             self.delegateQueue.addOperation {
+                
                 var dataTasks = [URLSessionDataTask]()
                 var uploadTasks = [URLSessionUploadTask]()
                 var downloadTasks = [URLSessionDownloadTask]()
 
+                // 这里, 如果不使用 self, 会很难理解. 所以, 该用的时候, 还是要用.
                 for task in self.taskRegistry.allTasks {
+                    // 只返回, 还在运行, 或者瞪大运行的.
                     guard task.state == .running || task.isSuspendedAfterResume else { continue }
-
+                    // 分类填充.
                     if let uploadTask = task as? URLSessionUploadTask {
                         uploadTasks.append(uploadTask)
                     } else if let dataTask = task as? URLSessionDataTask {
@@ -435,10 +425,13 @@ open class URLSession : NSObject {
      * see <Foundation/NSURLError.h>.  The delegate, if any, will still be
      * called for authentication challenges.
      */
-    open func dataTask(with request: URLRequest, completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionDataTask {
+    // 不关心具体的过程, 仅仅关心结果.
+    open func dataTask(with request: URLRequest,
+                       completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionDataTask {
         return dataTask(with: _Request(request), behaviour: .dataCompletionHandler(completionHandler))
     }
 
+    // 根据一个 type 值, 区分是回调, 还是代理, swift 里面, 就是用的 enum. 因为 enum 更加强大.
     open func dataTask(with url: URL, completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionDataTask {
         return dataTask(with: _Request(url), behaviour: .dataCompletionHandler(completionHandler))
     }
@@ -521,6 +514,7 @@ fileprivate extension URLSession {
         case request(URLRequest)
         case url(URL)
     }
+    // 一个统一的方法, 将 configuration 里面的内容, 填充到 request 里面去.
     func createConfiguredRequest(from request: URLSession._Request) -> URLRequest {
         let r = request.createMutableURLRequest()
         return _configuration.configure(request: r)
@@ -558,16 +552,18 @@ fileprivate extension URLSession {
 // 这样更好, 一个专门的 private, public 方法调用这个大而全的方法, 这个方法, 又不会暴露出去.
 fileprivate extension URLSession {
     /// All public methods funnel into this one. very good.
+    // _TaskRegistry._Behaviour 里面, 存储了值, 而不仅仅是 type, 应该多用这种特性.
     func dataTask(with request: _Request,
                   behaviour: _TaskRegistry._Behaviour) -> URLSessionDataTask {
         // 如果, session 已经 invalidated, 禁止重新开启任务.
         guard !self.invalidated else { fatalError("Session invalidated") }
-        let request = createConfiguredRequest(from: request) // 生成 request
+        let request = createConfiguredRequest(from: request) // 通过 configuration 生成 request.
         let id = createNextTaskIdentifier() // 生成 id.
         let task = URLSessionDataTask(session: self,
                                       request: request,
                                       taskIdentifier: id)
         // 所以, Session 其实也是个任务管理的机制, 如何进行网络连接, 数据如何管理, 是各个 task 的事情.
+        // 将 task 异步添加到任务管理对象里面去.
         workQueue.async {
             self.taskRegistry.add(task, behaviour: behaviour)
         }
