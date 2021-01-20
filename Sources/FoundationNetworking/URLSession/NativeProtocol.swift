@@ -391,6 +391,7 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
                 fatalError("Task has no original request.")
             }
             
+            // 这里, 使用了缓存的数据.
             // Check if the cached response is good to use:
             if let cachedResponse = cachedResponse, canRespondFromCache(using: cachedResponse) {
                 self.internalState = .fulfillingFromCache(cachedResponse)

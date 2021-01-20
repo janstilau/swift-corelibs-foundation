@@ -20,6 +20,7 @@ import Foundation
 /// on behalf of a suspended application, within certain constraints.
 
 // 可以看到, 这就是一个纯数据类, 没有一点方法.
+// 这是一个 class.
 open class URLSessionConfiguration : NSObject, NSCopying {
     // -init is silently incorrect in URLSessionCofiguration on the desktop. Ensure code that relied on swift-corelibs-foundation's init() being functional is redirected to the appropriate cross-platform class property.
     @available(*, deprecated, message: "Use .default instead.", renamed: "URLSessionConfiguration.default")

@@ -169,13 +169,17 @@ extension URLSession {
 }
 
 fileprivate let globalVarSyncQ = DispatchQueue(label: "org.swift.Foundation.URLSession.GlobalVarSyncQ")
+
 fileprivate var sessionCounter = Int32(0)
+// sync, 通过闭包的返回值, 确定返回值类型.
+// 这种, 使用一个全局静态 Int 获取 Id 的方式, 是通用的.
 fileprivate func nextSessionIdentifier() -> Int32 {
     return globalVarSyncQ.sync {
         sessionCounter += 1
         return sessionCounter
     }
 }
+
 public let NSURLSessionTransferSizeUnknown: Int64 = -1
 
 open class URLSession : NSObject {
@@ -205,6 +209,7 @@ open class URLSession : NSObject {
         var configuration = URLSessionConfiguration.default
         configuration.httpCookieStorage = HTTPCookieStorage.shared
         configuration.protocolClasses = URLProtocol.getProtocols()
+        // 使用, default 的 配置, share 的 cookie 存储, URLProtocol 配置的 protocols, 创建一个 Session.
         return URLSession(configuration: configuration, delegate: nil, delegateQueue: nil)
     }()
 
@@ -215,10 +220,14 @@ open class URLSession : NSObject {
      * If you do specify a delegate, the delegate will be retained until after
      * the delegate has been sent the URLSession:didBecomeInvalidWithError: message.
      */
+    // 这里, delegate 会被 retain.
+    // 然后在 sesion invaliad 的时候, 会释放.
     public /*not inherited*/ init(configuration: URLSessionConfiguration) {
         initializeLibcurl()
         identifier = nextSessionIdentifier()
         self.workQueue = DispatchQueue(label: "URLSession<\(identifier)>")
+        // delegate, 是在一个串行 queue 里面的, 因为网络的数据, 需要有序.
+        // 不然, data 过来了之后, 3 号 data 就可能跑到 1, 2 号的前面了.
         self.delegateQueue = OperationQueue()
         self.delegateQueue.maxConcurrentOperationCount = 1
         self.delegate = nil
@@ -260,8 +269,8 @@ open class URLSession : NSObject {
     }
     
     // 没有把所有的数据部分, 写到一起. 而是分模块进行的. 下面的
-    open private(set) var delegateQueue: OperationQueue
-    open private(set) var delegate: URLSessionDelegate?
+    open private(set) var delegateQueue: OperationQueue // 代理方法所在的位置.
+    open private(set) var delegate: URLSessionDelegate? // 代理.
     open private(set) var configuration: URLSessionConfiguration
     
     /*
