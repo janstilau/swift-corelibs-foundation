@@ -139,6 +139,7 @@ public protocol URLProtocolClient : NSObjectProtocol {
     func urlProtocol(_ protocol: URLProtocol, didCancel challenge: URLAuthenticationChallenge)
 }
 
+// 这里, 专门有一个类, 叫做 _ProtocolClient
 internal class _ProtocolClient : NSObject {
     var cachePolicy: URLCache.StoragePolicy = .notAllowed
     var cacheableData: [Data]?
@@ -427,5 +428,6 @@ open class URLProtocol : NSObject {
         get { return self._task }
     }
 
+    // 在这里, Protocol 里面, 居然存了一个 task.
     private var _task : URLSessionTask? = nil
 }

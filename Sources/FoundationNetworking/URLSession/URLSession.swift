@@ -185,7 +185,7 @@ open class URLSession : NSObject {
     internal let workQueue: DispatchQueue 
     internal let taskRegistry = URLSession._TaskRegistry()
     fileprivate let identifier: Int32
-    fileprivate var invalidated = false
+    fileprivate var invalidated = false // 仅仅是一个 bool 值而已.
     fileprivate static let registerProtocols: () = {
         // TODO: We register all the native protocols here.
         _ = URLProtocol.registerClass(_HTTPURLProtocol.self)
@@ -259,7 +259,7 @@ open class URLSession : NSObject {
         let _ = URLSession.registerProtocols
     }
     
-    // 没有把所有的数据部分, 写到一起.
+    // 没有把所有的数据部分, 写到一起. 而是分模块进行的. 下面的
     open private(set) var delegateQueue: OperationQueue
     open private(set) var delegate: URLSessionDelegate?
     open private(set) var configuration: URLSessionConfiguration
@@ -507,6 +507,7 @@ open class URLSession : NSObject {
 
 // Helpers
 fileprivate extension URLSession {
+    // 大量的使用枚举, 让代码变得清晰.
     enum _Request {
         case request(URLRequest)
         case url(URL)
@@ -525,6 +526,7 @@ extension URLSession._Request {
     }
 }
 extension URLSession._Request {
+    // 这里, 在之前 OC 里面, 就是一个 if 判断, 但在这, 就是 enum 的分化.
     func createMutableURLRequest() -> URLRequest {
         switch self {
         case .url(let url): return URLRequest(url: url)
@@ -543,15 +545,20 @@ fileprivate extension URLSession {
     }
 }
 
+// fileprivate, 很好, 限制了范围.
+// 这样更好, 一个专门的 private, public 方法调用这个大而全的方法, 这个方法, 又不会暴露出去.
 fileprivate extension URLSession {
-    /// Create a data task.
-    ///
-    /// All public methods funnel into this one.
-    func dataTask(with request: _Request, behaviour: _TaskRegistry._Behaviour) -> URLSessionDataTask {
+    /// All public methods funnel into this one. very good.
+    func dataTask(with request: _Request,
+                  behaviour: _TaskRegistry._Behaviour) -> URLSessionDataTask {
+        // 如果, session 已经 invalidated, 禁止重新开启任务.
         guard !self.invalidated else { fatalError("Session invalidated") }
-        let r = createConfiguredRequest(from: request)
-        let i = createNextTaskIdentifier()
-        let task = URLSessionDataTask(session: self, request: r, taskIdentifier: i)
+        let request = createConfiguredRequest(from: request) // 生成 request
+        let id = createNextTaskIdentifier() // 生成 id.
+        let task = URLSessionDataTask(session: self,
+                                      request: request,
+                                      taskIdentifier: id)
+        // 所以, Session 其实也是个任务管理的机制, 如何进行网络连接, 数据如何管理, 是各个 task 的事情.
         workQueue.async {
             self.taskRegistry.add(task, behaviour: behaviour)
         }

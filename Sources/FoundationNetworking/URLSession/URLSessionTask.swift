@@ -961,6 +961,7 @@ extension _ProtocolClient : URLProtocolClient {
         }
     }
 
+    // 在 protocol 里面, 获取到了数据, 抛给了上层.
     func urlProtocol(_ protocol: URLProtocol, didLoad data: Data) {
         `protocol`.properties[.responseData] = data
         guard let task = `protocol`.task else { fatalError() }
@@ -980,6 +981,8 @@ extension _ProtocolClient : URLProtocolClient {
             let dataDelegate = delegate as? URLSessionDataDelegate
             let dataTask = task as? URLSessionDataTask
             session.delegateQueue.addOperation {
+                // 在这里, 想 dataTask 的 delegate 传输数据了.
+                // didReceivedata
                 dataDelegate?.urlSession(session, dataTask: dataTask!, didReceive: data)
             }
         default: return
@@ -1037,6 +1040,7 @@ extension _ProtocolClient : URLProtocolClient {
         fatalError("The URLSession swift-corelibs-foundation implementation doesn't currently handle redirects directly.")
     }
 }
+
 extension URLSessionTask {
     typealias _AuthHandler = ((URLSessionTask, URLSession.AuthChallengeDisposition, URLCredential?) -> ())
 

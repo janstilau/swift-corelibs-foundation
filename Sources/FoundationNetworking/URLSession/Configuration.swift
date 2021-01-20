@@ -103,7 +103,7 @@ internal extension URLSession._Configuration {
     }
 }
 
-// Configure NSURLRequests
+// 通过, _Configuration, 对于这个 session 所有的 request, 进行一次配置工作.
 internal extension URLSession._Configuration {
     func configure(request: URLRequest) -> URLRequest {
         return setCookies(on: request)
