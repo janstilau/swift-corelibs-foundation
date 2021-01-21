@@ -1,22 +1,3 @@
-// Foundation/URLSession/NativeProtocol.swift - NSURLSession & libcurl
-//
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2017 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-// -----------------------------------------------------------------------------
-///
-/// This file has the common implementation of Native protocols like HTTP,FTP,Data
-/// These are libcurl helpers for the URLSession API code.
-/// - SeeAlso: https://curl.haxx.se/libcurl/c/
-/// - SeeAlso: NSURLSession.swift
-///
-// -----------------------------------------------------------------------------
-
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
 import SwiftFoundation
 #else
@@ -34,6 +15,7 @@ internal let enableDebugOutput: Bool = {
 }()
 
 internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
+    
     internal var easyHandle: _EasyHandle!
     internal lazy var tempFileURL: URL = {
         let fileName = NSTemporaryDirectory() + NSUUID().uuidString + ".tmp"

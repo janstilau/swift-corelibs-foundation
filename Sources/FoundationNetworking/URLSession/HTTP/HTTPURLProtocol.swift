@@ -1,12 +1,3 @@
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
 import SwiftFoundation
 #else
@@ -17,8 +8,9 @@ import Foundation
 @_implementationOnly import CFURLSessionInterface
 import Dispatch
 
+// 它是 _NativeProtocol 的子类.
 internal class _HTTPURLProtocol: _NativeProtocol {
-
+    
     // When processing redirects, the intermediate 3xx response bodies are normally discarded.
     // If the call to urlSession(_:task:willPerformHTTPRedirection:newRequest:completionHandler:)
     // results in the completion handler being called with a nil URLRequest, then processing stops
@@ -26,20 +18,21 @@ internal class _HTTPURLProtocol: _NativeProtocol {
     // mechanism. `lastRedirectBody` holds the body of the redirect currently being processed.
     var lastRedirectBody: Data? = nil
     private var redirectCount = 0
-
+    
     public required init(task: URLSessionTask, cachedResponse: CachedURLResponse?, client: URLProtocolClient?) {
         super.init(task: task, cachedResponse: cachedResponse, client: client)
     }
-
+    
     public required init(request: URLRequest, cachedResponse: CachedURLResponse?, client: URLProtocolClient?) {
         super.init(request: request, cachedResponse: cachedResponse, client: client)
     }
-
+    
+    // 以 http, https 开头的, 就能相应.
     override class func canInit(with request: URLRequest) -> Bool {
         guard request.url?.scheme == "http" || request.url?.scheme == "https" else { return false }
         return true
     }
-
+    
     override func didReceive(headerData data: Data, contentLength: Int64) -> _EasyHandle._Action {
         guard case .transferInProgress(let ts) = internalState else {
             fatalError("Received header data, but no transfer in progress.")
@@ -55,7 +48,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
                 // The header is now complete, but wasn't before.
                 let response = newTS.response as! HTTPURLResponse
                 if let contentEncoding = response.allHeaderFields["Content-Encoding"] as? String,
-                        contentEncoding != "identity" {
+                   contentEncoding != "identity" {
                     // compressed responses do not report expected size
                     task.countOfBytesExpectedToReceive = NSURLSessionTransferSizeUnknown
                 } else {
@@ -135,9 +128,9 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         
         // We opt not to cache any requests or responses that contain authorization headers.
         if httpResponse.allHeaderFields["WWW-Authenticate"] != nil ||
-           httpResponse.allHeaderFields["Proxy-Authenticate"] != nil ||
-           httpRequest.allHTTPHeaderFields?["Authorization"] != nil ||
-           httpRequest.allHTTPHeaderFields?["Proxy-Authorization"] != nil {
+            httpResponse.allHeaderFields["Proxy-Authenticate"] != nil ||
+            httpRequest.allHTTPHeaderFields?["Authorization"] != nil ||
+            httpRequest.allHTTPHeaderFields?["Proxy-Authorization"] != nil {
             return false
         }
         
@@ -264,7 +257,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         // Expiration checks are done in canCache(…).
         return true
     }
-
+    
     /// Set options on the easy handle to match the given request.
     ///
     /// This performs a series of `curl_easy_setopt()` calls.
@@ -273,14 +266,14 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         // to configure everything on the handle. Since we might be re-using
         // a handle, we must be sure to set everything and not rely on default
         // values.
-
+        
         //TODO: We could add a strong reference from the easy handle back to
         // its URLSessionTask by means of CURLOPT_PRIVATE -- that would ensure
         // that the task is always around while the handle is running.
         // We would have to break that retain cycle once the handle completes
         // its transfer.
-
-
+        
+        
         if request.httpMethod == "GET" {
             // GET requests cannot have a body
             guard case .none = body else {
@@ -289,24 +282,24 @@ internal class _HTTPURLProtocol: _NativeProtocol {
                                     userInfo: [
                                         NSLocalizedDescriptionKey: "resource exceeds maximum size",
                                         NSURLErrorFailingURLStringErrorKey: request.url?.description ?? ""
-                ])
+                                    ])
                 internalState = .transferFailed
                 transferCompleted(withError: error)
                 return
             }
         }
-
+        
         // Behavior Options
         easyHandle.set(verboseModeOn: enableLibcurlDebugOutput)
         easyHandle.set(debugOutputOn: enableLibcurlDebugOutput, task: task!)
         easyHandle.set(passHeadersToDataStream: false)
         easyHandle.set(progressMeterOff: true)
         easyHandle.set(skipAllSignalHandling: true)
-
+        
         // Error Options:
         easyHandle.set(errorBuffer: nil)
         easyHandle.set(failOnHTTPErrorCode: false)
-
+        
         // Network Options:
         guard let url = request.url else {
             fatalError("No URL in request.")
@@ -342,22 +335,22 @@ internal class _HTTPURLProtocol: _NativeProtocol {
             failWith(error: error, request: request)
             return
         }
- 
+        
         // HTTP Options:
         easyHandle.set(followLocation: false)
-
+        
         // The httpAdditionalHeaders from session configuration has to be added to the request.
         // The request.allHTTPHeaders can override the httpAdditionalHeaders elements. Add the
         // httpAdditionalHeaders from session configuration first and then append/update the
         // request.allHTTPHeaders so that request.allHTTPHeaders can override httpAdditionalHeaders.
-
+        
         let httpSession = self.task?.session as! URLSession
         var httpHeaders: [AnyHashable : Any]?
-
+        
         if let hh = httpSession.configuration.httpAdditionalHeaders {
             httpHeaders = hh
         }
-
+        
         if let hh = request.allHTTPHeaderFields {
             if httpHeaders == nil {
                 httpHeaders = hh
@@ -387,15 +380,15 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         } else {
             customHeaders = headersForRequest
         }
-
+        
         easyHandle.set(customHeaders: customHeaders)
-
+        
         //TODO: The CURLOPT_PIPEDWAIT option is unavailable on Ubuntu 14.04 (libcurl 7.36)
         //TODO: Introduce something like an #if, if we want to set them here
-
+        
         //set the request timeout
         //TODO: the timeout value needs to be reset on every data transfer
-
+        
         var timeoutInterval = Int(httpSession.configuration.timeoutIntervalForRequest) * 1000
         if request.isTimeoutIntervalSet {
             timeoutInterval = Int(request.timeoutInterval) * 1000
@@ -404,7 +397,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
             guard let self = self, let task = self.task else {
                 fatalError("Timeout on a task that doesn't exist")
             } //this guard must always pass
-
+            
             // If a timeout occurred while waiting for a redirect completion handler to be called by
             // the delegate then terminate the task but DONT set the error to NSURLErrorTimedOut.
             // This matches Darwin.
@@ -419,7 +412,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
                 self.client?.urlProtocol(self, didFailWithError: urlError)
             }
         }
-
+        
         guard let task = self.task else { fatalError() }
         easyHandle.timeoutTimer = _TimeoutSource(queue: task.workQueue, milliseconds: timeoutInterval, handler: timeoutHandler)
         easyHandle.set(automaticBodyDecompression: true)
@@ -427,7 +420,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         // Always set the status as it may change if a HEAD is converted to a GET.
         easyHandle.set(noBody: request.httpMethod == "HEAD")
     }
-
+    
     /// What action to take
     override func completionAction(forCompletedRequest request: URLRequest, response: URLResponse) -> _CompletionAction {
         // Redirect:
@@ -439,12 +432,12 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         }
         return .completeTask
     }
-
+    
     override func redirectFor(request: URLRequest) {
         guard case .transferCompleted(response: let response, bodyDataDrain: let bodyDataDrain) = self.internalState else {
             fatalError("Trying to redirect, but the transfer is not complete.")
         }
-
+        
         // Avoid a never ending redirect chain by having a hard limit on the number of redirects.
         // This value mirrors Darwin.
         redirectCount += 1
@@ -458,9 +451,9 @@ internal class _HTTPURLProtocol: _NativeProtocol {
             failWith(error: error, request: request)
             return
         }
-
+        
         guard let session = task?.session as? URLSession else { fatalError() }
-
+        
         if let delegate = session.delegate as? URLSessionTaskDelegate {
             // At this point we need to change the internal state to note
             // that we're waiting for the delegate to call the completion
@@ -468,7 +461,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
             // (willPerformHTTPRedirection). The task will then switch out of
             // its internal state once the delegate calls the completion
             // handler.
-
+            
             //TODO: Should the `public response: URLResponse` property be updated
             // before we call delegate API
             self.internalState = .waitingForRedirectCompletionHandler(response: response, bodyDataDrain: bodyDataDrain)
@@ -488,7 +481,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
             startNewTransfer(with: configuredRequest)
         }
     }
-
+    
     override func validateHeaderComplete(transferState: _NativeProtocol._TransferState) -> URLResponse? {
         if !transferState.isHeaderComplete {
             return HTTPURLResponse(url: transferState.url, statusCode: 200, httpVersion: "HTTP/0.9", headerFields: [:])
@@ -502,7 +495,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
 }
 
 fileprivate extension _HTTPURLProtocol {
-
+    
     /// These are a list of headers that should be passed to libcurl.
     ///
     /// Headers will be returned as `Accept: text/html` strings for
@@ -514,12 +507,12 @@ fileprivate extension _HTTPURLProtocol {
     func curlHeaders(for httpHeaders: [AnyHashable : Any]?) -> [String] {
         var result: [String] = []
         var names = Set<String>()
-	if let hh = httpHeaders as? [String : String] {
+        if let hh = httpHeaders as? [String : String] {
             hh.forEach {
                 let name = $0.0.lowercased()
                 guard !names.contains(name) else { return }
                 names.insert(name)
-
+                
                 if $0.1.isEmpty {
                     result.append($0.0 + ";")
                 } else {
@@ -553,7 +546,7 @@ fileprivate extension _HTTPURLProtocol {
     var curlHeadersToSet: [(String,String)] {
         var result = [("Connection", "keep-alive"),
                       ("User-Agent", userAgentString),
-                      ]
+        ]
         if let language = NSLocale.current.languageCode {
             result.append(("Accept-Language", language))
         }
@@ -642,7 +635,7 @@ internal extension _HTTPURLProtocol {
             break
         }
     }
-
+    
     /// If the response is a redirect, return the new request
     ///
     /// RFC 7231 section 6.4 defines redirection behavior for HTTP/1.1
@@ -654,40 +647,40 @@ internal extension _HTTPURLProtocol {
         guard
             let location = response.value(forHeaderField: .location),
             let targetURL = URL(string: location)
-            else {
-                // Can't redirect when there's no location to redirect to.
-                return nil
+        else {
+            // Can't redirect when there's no location to redirect to.
+            return nil
         }
         
         var request = fromRequest
         
         // Check for a redirect:
         switch response.statusCode {
-            case 301...302 where request.httpMethod == "POST", 303:
-                // Change "POST" into "GET" but leave other methods unchanged:
-                request.httpMethod = "GET"
-                request.httpBody = nil
-
-            case 301...302, 305...308:
-                // Re-use existing method:
-                break
-
-            default:
-                return nil
+        case 301...302 where request.httpMethod == "POST", 303:
+            // Change "POST" into "GET" but leave other methods unchanged:
+            request.httpMethod = "GET"
+            request.httpBody = nil
+            
+        case 301...302, 305...308:
+            // Re-use existing method:
+            break
+            
+        default:
+            return nil
         }
-
+        
         // If targetURL has only relative path of url, create a new valid url with relative path
         // Otherwise, return request with targetURL ie.url from location field
         guard targetURL.scheme == nil || targetURL.host == nil else {
             request.url = targetURL
             return request
         }
-
+        
         guard
             let fromUrl = fromRequest.url,
             var components = URLComponents(url: fromUrl, resolvingAgainstBaseURL: false)
-            else { return nil }
-
+        else { return nil }
+        
         // If the new URL contains a host, use the host and port from the new URL.
         // Otherwise, the host and port from the original URL are used.
         if targetURL.host != nil {
@@ -706,10 +699,10 @@ internal extension _HTTPURLProtocol {
         // percent encoded again.
         components.percentEncodedQuery = targetURL.query
         components.percentEncodedFragment = targetURL.fragment
-
+        
         guard let url = components.url else { fatalError("Invalid URL") }
         request.url = url
-
+        
         return request
     }
 }
@@ -721,7 +714,7 @@ fileprivate extension HTTPURLResponse {
         /// - SeeAlso: RFC 2616 section 14.30 <https://tools.ietf.org/html/rfc2616#section-14.30>
         case location = "Location"
     }
-
+    
     func value(forHeaderField field: _Field) -> String? {
         let value = field.rawValue
         if let location = self.allHeaderFields[value] as? String {

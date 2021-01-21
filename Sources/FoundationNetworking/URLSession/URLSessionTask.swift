@@ -78,33 +78,39 @@ open class URLSessionTask : NSObject, NSCopying {
     }
     
     // We're not going to heed this one. If someone is setting it in Linux code, they may be relying on behavior that isn't there; warn.
-    @available(*, deprecated, message: "swift-corelibs-foundation does not support background URLSession instances, and this property is documented to have no effect when set on tasks created from non-background URLSession instances. Modifying this property has no effect in swift-corelibs-foundation and shouldn't be relied upon; resume tasks at the appropriate time instead.")
+    @available(*, deprecated, message: "")
     open var earliestBeginDate: Date? = nil
     
-    /// How many times the task has been suspended, 0 indicating a running task.
+    // 居然还有这么一个计数器, 只有到 0 的时候, resume 才能启动 loading
     internal var suspendCount = 1
     
     internal var actualSession: URLSession? { return session as? URLSession }
     internal var session: URLSessionProtocol! //change to nil when task completes
-
+    
     fileprivate enum ProtocolState {
-        case toBeCreated
-        case awaitingCacheReply(Bag<(URLProtocol?) -> Void>)
-        case existing(URLProtocol)
+        case toBeCreated // 还没有 protocol 呢
+        case awaitingCacheReply(Bag<(URLProtocol?) -> Void>) // 等着查找缓存, 然后出发存储的回调.
+        case existing(URLProtocol) // 建立了一个, 存在这. 通过枚举, 状态和值, 绑定在了一起.
         case invalidated
     }
     
     fileprivate let _protocolLock = NSLock() // protects:
     fileprivate var _protocolStorage: ProtocolState = .toBeCreated
-    internal    var _lastCredentialUsedFromStorageDuringAuthentication: (protectionSpace: URLProtectionSpace, credential: URLCredential)?
+    internal    var _lastCredentialUsedFromStorageDuringAuthentication:
+        (protectionSpace: URLProtectionSpace, credential: URLCredential)?
     
+    // 这里, 是属性, 是 get 方法. 不是初始化.
     private var _protocolClass: URLProtocol.Type {
         guard let request = currentRequest else { fatalError("A protocol class was requested, but we do not have a current request") }
-        let protocolClasses = session.configuration.protocolClasses ?? []
+        let protocolClasses = session.configuration.protocolClasses ?? [] // 默认只有, http, ftp.
+        // 首先, 通过 config 把能够使用的 protocol 拿出来, 然后通过 URLProtocol 进行判断.
         if let urlProtocolClass = URLProtocol.getProtocolClass(protocols: protocolClasses, request: request) {
+            // 然后这里还有一次类型的 iskindof 的判断.
+            // 在 Swift 里面, iskindof, 就是 as? 的方式.
             guard let urlProtocol = urlProtocolClass as? URLProtocol.Type else { fatalError("A protocol class specified in the URLSessionConfiguration's .protocolClasses array was not a URLProtocol subclass: \(urlProtocolClass)") }
             return urlProtocol
         } else {
+            // 如果 config 里面的都不行, 那么就用 URLProtocol 里面注册的捋一遍.
             let protocolClasses = URLProtocol.getProtocols() ?? []
             if let urlProtocolClass = URLProtocol.getProtocolClass(protocols: protocolClasses, request: request) {
                 guard let urlProtocol = urlProtocolClass as? URLProtocol.Type else { fatalError("A protocol class registered with URLProtocol.register… was not a URLProtocol subclass: \(urlProtocolClass)") }
@@ -115,42 +121,45 @@ open class URLSessionTask : NSObject, NSCopying {
         fatalError("Couldn't find a protocol appropriate for request: \(request)")
     }
     
+    // 先获取到 protocol 对象, 然后执行闭包不可以吗????
     func _getProtocol(_ callback: @escaping (URLProtocol?) -> Void) {
         _protocolLock.lock() // Must be balanced below, before we call out ⬇
         
         switch _protocolStorage {
         case .toBeCreated:
+            // 如果, 有缓存, task 又是最简单的 dataTask.
             if let cache = session.configuration.urlCache, let me = self as? URLSessionDataTask {
+                
                 let bag: Bag<(URLProtocol?) -> Void> = Bag()
                 bag.values.append(callback)
-                
                 _protocolStorage = .awaitingCacheReply(bag)
-                _protocolLock.unlock() // Balances above ⬆
-                
+                _protocolLock.unlock()
+                // 之所以这么麻烦, 是因为 getCachedResponse 是一个异步操作.
                 cache.getCachedResponse(for: me) { (response) in
-                    let urlProtocol = self._protocolClass.init(task: self, cachedResponse: response, client: nil)
+                    // 因为在 protocol 里面, 这是一个 require 的 init 方法. 这里才能这么用.
+                    let urlProtocol = self._protocolClass.init(task: self,
+                                                               cachedResponse: response,
+                                                               client: nil)
                     self._satisfyProtocolRequest(with: urlProtocol)
                 }
             } else {
+                // 如果, 没有缓存, 就真正的进行 protocol 的创建.
                 let urlProtocol = _protocolClass.init(task: self, cachedResponse: nil, client: nil)
                 _protocolStorage = .existing(urlProtocol)
-                _protocolLock.unlock() // Balances above ⬆
-                
+                _protocolLock.unlock()
                 callback(urlProtocol)
             }
             
         case .awaitingCacheReply(let bag):
             bag.values.append(callback)
-            _protocolLock.unlock() // Balances above ⬆
-        
+            _protocolLock.unlock()
+            
         case .existing(let urlProtocol):
             _protocolLock.unlock() // Balances above ⬆
-            
             callback(urlProtocol)
-        
+            
         case .invalidated:
             _protocolLock.unlock() // Balances above ⬆
-            
             callback(nil)
         }
     }
@@ -160,25 +169,23 @@ open class URLSessionTask : NSObject, NSCopying {
         switch _protocolStorage {
         case .toBeCreated:
             _protocolStorage = .existing(urlProtocol)
-            _protocolLock.unlock() // Balances above ⬆
+            _protocolLock.unlock()
             
-        case .awaitingCacheReply(let bag):
+        case .awaitingCacheReply(let bag): // 这里, 因为 _protocolStorage 被重新复制, bag 的生命周期, 就只有这里了.
             _protocolStorage = .existing(urlProtocol)
-            _protocolLock.unlock() // Balances above ⬆
-            
+            _protocolLock.unlock()
             for callback in bag.values {
                 callback(urlProtocol)
             }
-            
         case .existing(_): fallthrough
         case .invalidated:
-            _protocolLock.unlock() // Balances above ⬆
+            _protocolLock.unlock()
         }
     }
     
     func _invalidateProtocol() {
         _protocolLock.performLocked {
-            _protocolStorage = .invalidated
+            _protocolStorage = .invalidated // 这里, 其实就是丢失了 protocol 的引用了.
         }
     }
     
@@ -203,6 +210,8 @@ open class URLSessionTask : NSObject, NSCopying {
         }
     }
     
+    // 类中, 所有的 get, set 都是通过该队列进行的.
+    // 其实这就是一把锁.
     private let syncQ = DispatchQueue(label: "org.swift.URLSessionTask.SyncQ")
     private var hasTriggeredResume: Bool = false
     internal var isSuspendedAfterResume: Bool {
@@ -212,22 +221,22 @@ open class URLSessionTask : NSObject, NSCopying {
     /// All operations must run on this queue.
     internal let workQueue: DispatchQueue 
     
+    // init 方法很少调用. 还是用的下面的, 带有各个实际参数的.
+    // dataTask 这个类, 只会在 Session 里面初始化. 自己不会调用的
     public override init() {
-        // Darwin Foundation oddly allows calling this initializer, even though
-        // such a task is quite broken -- it doesn't have a session. And calling
-        // e.g. `taskIdentifier` will crash.
-        //
-        // We set up the bare minimum for init to work, but don't care too much
-        // about things crashing later.
         session = _MissingURLSession()
         taskIdentifier = 0
         originalRequest = nil
         knownBody = URLSessionTask._Body.none
+        // 一个串行的队列.
         workQueue = DispatchQueue(label: "URLSessionTask.notused.0")
         super.init()
     }
-    /// Create a data task. If there is a httpBody in the URLRequest, use that as a parameter
-    internal convenience init(session: URLSession, request: URLRequest, taskIdentifier: Int) {
+    
+    internal convenience init(session: URLSession,
+                              request: URLRequest,
+                              taskIdentifier: Int) {
+        // 这里, 做了第一层的 body 的抽取工作.
         if let bodyData = request.httpBody, !bodyData.isEmpty {
             self.init(session: session, request: request, taskIdentifier: taskIdentifier, body: _Body.data(createDispatchData(bodyData)))
         } else if let bodyStream = request.httpBodyStream {
@@ -236,16 +245,17 @@ open class URLSessionTask : NSObject, NSCopying {
             self.init(session: session, request: request, taskIdentifier: taskIdentifier, body: _Body.none)
         }
     }
-
+    
     internal init(session: URLSession, request: URLRequest, taskIdentifier: Int, body: _Body?) {
         self.session = session
         /* make sure we're actually having a serial queue as it's used for synchronization */
         self.workQueue = DispatchQueue.init(label: "org.swift.URLSessionTask.WorkQueue", target: session.workQueue)
         self.taskIdentifier = taskIdentifier
-        self.originalRequest = request
+        self.originalRequest = request // 这个值, 以后只会读不会改. 因为会有重定向的原因, 所以专门记一下.
         self.knownBody = body
         super.init()
-        self.currentRequest = request
+        self.currentRequest = request // 实际的请求, 会因为重定向改变.
+        // process cancel 的后续触发逻辑.  process 这个类不是很了解.
         self.progress.cancellationHandler = { [weak self] in
             self?.cancel()
         }
@@ -266,17 +276,16 @@ open class URLSessionTask : NSObject, NSCopying {
     open internal(set) var taskIdentifier: Int
     
     /// May be nil if this is a stream task
+    open private(set) var originalRequest: URLRequest?
     
-    /*@NSCopying*/ open private(set) var originalRequest: URLRequest?
-
     /// If there's an authentication failure, we'd need to create a new request with the credentials supplied by the user
     var authRequest: URLRequest? = nil
-
+    
     /// Authentication failure count
     fileprivate var previousFailureCount = 0
     
     /// May differ from originalRequest due to http server redirection
-    /*@NSCopying*/ open internal(set) var currentRequest: URLRequest? {
+    open internal(set) var currentRequest: URLRequest? {
         get {
             return self.syncQ.sync { return self._currentRequest }
         }
@@ -430,22 +439,25 @@ open class URLSessionTask : NSObject, NSCopying {
             }
         }
     }
-    /// Resume the task.
-    ///
-    /// - SeeAlso: `suspend()`
+    
+    // 最重要的一个方法.
+    // 注意, 作用域的限制.
     open func resume() {
         workQueue.sync {
+            // 防卫式限制.
             guard self.state != .canceling && self.state != .completed else { return }
             if self.suspendCount > 0 { self.suspendCount -= 1 }
             self.updateTaskState()
+            
+            // 真正的 loading 的启动过程.
             if self.suspendCount == 0 {
                 self.hasTriggeredResume = true
+                // 获取到了 dataTask 的 protocol, 然后配置.
                 self._getProtocol { (urlProtocol) in
                     self.workQueue.async {
                         if let _protocol = urlProtocol {
-                            _protocol.startLoading()
-                        }
-                        else if self.error == nil {
+                            _protocol.startLoading() // 启动 protocol. 具体, 怎么 start, 各个 protocol 子类的责任.
+                        } else if self.error == nil { // 没拿到, 也就是 request 不能被识别. 组织 error 信息.
                             var userInfo: [String: Any] = [NSLocalizedDescriptionKey: "unsupported URL"]
                             if let url = self.originalRequest?.url {
                                 userInfo[NSURLErrorFailingURLErrorKey] = url
@@ -489,6 +501,9 @@ open class URLSessionTask : NSObject, NSCopying {
     fileprivate var _priority: Float = URLSessionTask.defaultPriority
 }
 
+
+
+
 extension URLSessionTask {
     public enum State : Int {
         /// The task is currently being serviced by the session
@@ -508,6 +523,7 @@ extension URLSessionTask {
     ///
     /// - Note: This must be called on the `workQueue`.
     internal func updateTaskState() {
+        // 不太明白啊, 这种, 先定义后调用, 有个屁用.
         func calculateState() -> URLSessionTask.State {
             if suspendCount == 0 {
                 return .running
@@ -523,11 +539,11 @@ internal extension URLSessionTask {
     enum _Body {
         case none
         case data(DispatchData)
-        /// Body data is read from the given file URL
         case file(URL)
         case stream(InputStream)
     }
 }
+
 internal extension URLSessionTask._Body {
     enum _Error : Error {
         case fileForBodyDataNotFound
@@ -590,6 +606,7 @@ extension URLSessionTask {
  * functionality over an URLSessionTask and its presence is merely
  * to provide lexical differentiation from download and upload tasks.
  */
+// 所有的功能, 在 URLSessionTask 已经实现了.
 open class URLSessionDataTask : URLSessionTask {
 }
 
@@ -728,13 +745,20 @@ open class URLSessionStreamTask : URLSessionTask {
 /* Key in the userInfo dictionary of an NSError received during a failed download. */
 public let URLSessionDownloadTaskResumeData: String = "NSURLSessionDownloadTaskResumeData"
 
+// 这个扩展, 还是定义在了 task 里面. 可以看做是, task 里面实现了 protocolClient 的协议.
 extension _ProtocolClient : URLProtocolClient {
-
-    func urlProtocol(_ protocol: URLProtocol, didReceive response: URLResponse, cacheStoragePolicy policy: URLCache.StoragePolicy) {
+    
+    // 这, 真的是一个非常不好的设计, protocol 里面, 藏了一个 task.
+    // policy 应该主要来源于 request 的设置.
+    func urlProtocol(_ protocol: URLProtocol,
+                     didReceive response: URLResponse,policy
+                        cacheStoragePolicy : URLCache.StoragePolicy) {
         guard let task = `protocol`.task else { fatalError("Received response, but there's no task.") }
+        // Response, 是相应元数据的解析结果. 指导着, 如何对 data 进行解析.
         task.response = response
+        // 这里这么转换, 是因为 task 里面存的是一个协议对象. 完全是, 没有必要. 徒增复杂度.
         let session = task.session as! URLSession
-        guard let dataTask = task as? URLSessionDataTask else { return }
+        guard let dataTask = task as? URLSessionDataTask else { return } // ???
         
         // Only cache data tasks:
         self.cachePolicy = policy
@@ -743,34 +767,38 @@ extension _ProtocolClient : URLProtocolClient {
             switch policy {
             case .allowed: fallthrough
             case .allowedInMemoryOnly:
-                cacheableData = []
+                cacheableData = [] // 这里, 不写 self 导致不清楚这两变量的来源. 该写还是要写.
                 cacheableResponse = response
-                
             case .notAllowed:
                 break
             }
         }
         
+        // 如果, 是调用代理, 那么就像 session 的 delegateQueue 里面, 增加一个调用代理的任务.
         switch session.behaviour(for: task) {
         case .taskDelegate(let delegate as URLSessionDataDelegate):
             session.delegateQueue.addOperation {
                 // 在这里, 是实际的代理方法的调用.
-                delegate.urlSession(session, dataTask: dataTask, didReceive: response, completionHandler: { _ in
-                    URLSession.printDebug("warning: Ignoring disposition from completion handler.")
-                })
+                delegate.urlSession(session, dataTask: dataTask, didReceive: response, completionHandler: nil)
             }
+        // 其他情况, 不管, 最后在使用.
         case .noDelegate, .taskDelegate, .dataCompletionHandler, .downloadCompletionHandler:
             break
         }
     }
-
+    
+    // Protocol 顺利完成 loading 的回调.
     func urlProtocolDidFinishLoading(_ urlProtocol: URLProtocol) {
         guard let task = urlProtocol.task else { fatalError() }
         guard let session = task.session as? URLSession else { fatalError() }
         let urlResponse = task.response
-        if let response = urlResponse as? HTTPURLResponse, response.statusCode == 401 {
+        
+        // 需要认证.
+        if let response = urlResponse as? HTTPURLResponse,
+           response.statusCode == 401 {
+            
+            // 根据相应里面的内容, 建立 protectSpace
             if let protectionSpace = URLProtectionSpace.create(with: response) {
-
                 func proceed(proposing credential: URLCredential?) {
                     let proposedCredential: URLCredential?
                     let last = task._protocolLock.performLocked { task._lastCredentialUsedFromStorageDuringAuthentication }
@@ -791,7 +819,7 @@ extension _ProtocolClient : URLProtocolClient {
                 if let storage = session.configuration.urlCredentialStorage {
                     storage.getCredentials(for: protectionSpace, task: task) { (credentials) in
                         if let credentials = credentials,
-                            let firstKeyLexicographically = credentials.keys.sorted().first {
+                           let firstKeyLexicographically = credentials.keys.sorted().first {
                             proceed(proposing: credentials[firstKeyLexicographically])
                         } else {
                             storage.getDefaultCredential(for: protectionSpace, task: task) { (credential) in
@@ -807,11 +835,14 @@ extension _ProtocolClient : URLProtocolClient {
             }
         }
         
+        // 这里, 存储了一下证书.
         if let storage = session.configuration.urlCredentialStorage,
            let last = task._protocolLock.performLocked({ task._lastCredentialUsedFromStorageDuringAuthentication }) {
             storage.set(last.credential, for: last.protectionSpace, task: task)
         }
         
+        // 这里, 存储了一下响应.
+        // 在 Gnu 里面, 是在 protocol 层面, 就做了这件事.
         if let cache = session.configuration.urlCache,
            let data = cacheableData,
            let response = cacheableResponse,
@@ -832,9 +863,11 @@ extension _ProtocolClient : URLProtocolClient {
             }
         }
         
+        // 根据 task 的不同的回调行为, 调用不同的回调.
         switch session.behaviour(for: task) {
         case .taskDelegate(let delegate):
-            if let downloadDelegate = delegate as? URLSessionDownloadDelegate, let downloadTask = task as? URLSessionDownloadTask {
+            if let downloadDelegate = delegate as? URLSessionDownloadDelegate,
+               let downloadTask = task as? URLSessionDownloadTask {
                 session.delegateQueue.addOperation {
                     downloadDelegate.urlSession(session, downloadTask: downloadTask, didFinishDownloadingTo: urlProtocol.properties[URLProtocol._PropertyKey.temporaryFileURL] as! URL)
                 }
@@ -874,28 +907,28 @@ extension _ProtocolClient : URLProtocolClient {
         }
         task._invalidateProtocol()
     }
-
+    
     func urlProtocol(_ protocol: URLProtocol, didCancel challenge: URLAuthenticationChallenge) {
         guard let task = `protocol`.task else { fatalError() }
-        // Fail with a cancellation error, for now.
         urlProtocol(task: task, didFailWithError: NSError(domain: NSCocoaErrorDomain, code: CocoaError.userCancelled.rawValue))
     }
-
+    
     func urlProtocol(_ protocol: URLProtocol, didReceive challenge: URLAuthenticationChallenge) {
         guard let task = `protocol`.task else { fatalError("Received response, but there's no task.") }
         guard let session = task.session as? URLSession else { fatalError("Task not associated with URLSession.") }
         
+        // 使用证书
         func proceed(using credential: URLCredential?) {
             let protectionSpace = challenge.protectionSpace
             let authScheme = protectionSpace.authenticationMethod
-
+            
             task.suspend()
             
             guard let handler = URLSessionTask.authHandler(for: authScheme) else {
                 fatalError("\(authScheme) is not supported")
             }
             handler(task, .useCredential, credential)
-
+            
             task._protocolLock.performLocked {
                 if let credential = credential {
                     task._lastCredentialUsedFromStorageDuringAuthentication = (protectionSpace: protectionSpace, credential: credential)
@@ -906,36 +939,41 @@ extension _ProtocolClient : URLProtocolClient {
             }
             
             task.resume()
+            
+            // suspend, resume 都有着 protocol 的 stop 和 start.
+            // 网络 loading, 是不能停止的, 停止的, 但是过程可以停止.
+            // 网络请求的时候, 可能重定向, 可以要求证书, 各种操作, 所以, 一次请求, 可能要建立很多次链接.
+            // Task 的暂停和回复, 是在这很多次的连接基础上, 而不是一次链接能够等待, 恢复
         }
         
         func attemptProceedingWithDefaultCredential() {
             if let credential = challenge.proposedCredential {
+                // 用上一次存的证书试一次.
                 let last = task._protocolLock.performLocked { task._lastCredentialUsedFromStorageDuringAuthentication }
-                
                 if last?.credential != credential {
                     proceed(using: credential)
                 } else {
-                    task.cancel()
+                    task.cancel() //找不到证书, 取消任务.
                 }
             }
         }
         
         if let delegate = session.delegate as? URLSessionTaskDelegate {
             session.delegateQueue.addOperation {
+                // 在这里代理里面, 用户会确定, 如何处置证书 disposition, 以及证书, 这个证书可能是用户自己提供的.
                 delegate.urlSession(session, task: task, didReceive: challenge) { disposition, credential in
                     
                     switch disposition {
-                    case .useCredential:
+                    case .useCredential: // 使用证书,
                         proceed(using: credential!)
                         
                     case .performDefaultHandling:
                         attemptProceedingWithDefaultCredential()
                         
                     case .rejectProtectionSpace:
-                        // swift-corelibs-foundation currently supports only a single protection space per request.
                         fallthrough
                     case .cancelAuthenticationChallenge:
-                        task.cancel()
+                        task.cancel() // 取消任务.
                     }
                     
                 }
@@ -944,7 +982,7 @@ extension _ProtocolClient : URLProtocolClient {
             attemptProceedingWithDefaultCredential()
         }
     }
-
+    
     // 在 protocol 里面, 获取到了数据, 抛给了上层.
     func urlProtocol(_ protocol: URLProtocol, didLoad data: Data) {
         `protocol`.properties[.responseData] = data
@@ -955,7 +993,7 @@ extension _ProtocolClient : URLProtocolClient {
         case .allowed: fallthrough
         case .allowedInMemoryOnly:
             cacheableData?.append(data)
-
+            
         case .notAllowed:
             break
         }
@@ -972,12 +1010,13 @@ extension _ProtocolClient : URLProtocolClient {
         default: return
         }
     }
-
+    
     func urlProtocol(_ protocol: URLProtocol, didFailWithError error: Error) {
         guard let task = `protocol`.task else { fatalError() }
         urlProtocol(task: task, didFailWithError: error)
     }
-
+    
+    // 任务失败的回调.
     func urlProtocol(task: URLSessionTask, didFailWithError error: Error) {
         guard let session = task.session as? URLSession else { fatalError() }
         switch session.behaviour(for: task) {
@@ -1017,9 +1056,9 @@ extension _ProtocolClient : URLProtocolClient {
         }
         task._invalidateProtocol()
     }
-
+    
     func urlProtocol(_ protocol: URLProtocol, cachedResponseIsValid cachedResponse: CachedURLResponse) {}
-
+    
     func urlProtocol(_ protocol: URLProtocol, wasRedirectedTo request: URLRequest, redirectResponse: URLResponse) {
         fatalError("The URLSession swift-corelibs-foundation implementation doesn't currently handle redirects directly.")
     }
@@ -1027,7 +1066,7 @@ extension _ProtocolClient : URLProtocolClient {
 
 extension URLSessionTask {
     typealias _AuthHandler = ((URLSessionTask, URLSession.AuthChallengeDisposition, URLCredential?) -> ())
-
+    
     static func authHandler(for authScheme: String) -> _AuthHandler? {
         let handlers: [String : _AuthHandler] = [
             NSURLAuthenticationMethodHTTPBasic : basicAuth,
@@ -1035,9 +1074,12 @@ extension URLSessionTask {
         ]
         return handlers[authScheme]
     }
-
-    //Authentication handlers
-    static func basicAuth(_ task: URLSessionTask, _ disposition: URLSession.AuthChallengeDisposition, _ credential: URLCredential?) {
+    
+    // 这是两个静态方法.
+    
+    static func basicAuth(_ task: URLSessionTask,
+                          _ disposition: URLSession.AuthChallengeDisposition,
+                          _ credential: URLCredential?) {
         //TODO: Handle disposition. For now, we default to .useCredential
         let user = credential?.user ?? ""
         let password = credential?.password ?? ""
@@ -1045,8 +1087,10 @@ extension URLSessionTask {
         task.authRequest = task.originalRequest
         task.authRequest?.setValue("Basic \(encodedString!)", forHTTPHeaderField: "Authorization")
     }
-
-    static func digestAuth(_ task: URLSessionTask, _ disposition: URLSession.AuthChallengeDisposition, _ credential: URLCredential?) {
+    
+    static func digestAuth(_ task: URLSessionTask,
+                           _ disposition: URLSession.AuthChallengeDisposition,
+                           _ credential: URLCredential?) {
         fatalError("The URLSession swift-corelibs-foundation implementation doesn't currently handle digest authentication.")
     }
 }

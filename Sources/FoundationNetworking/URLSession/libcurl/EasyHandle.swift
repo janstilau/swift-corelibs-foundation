@@ -123,6 +123,7 @@ internal protocol _EasyHandleDelegate: AnyObject {
     /// Gets called during the transfer to update progress.
     func updateProgressMeter(with propgress: _EasyHandle._Progress)
 }
+
 extension _EasyHandle {
     func set(verboseModeOn flag: Bool) {
         try! CFURLSession_easy_setopt_long(rawHandle, CFURLSessionOptionVERBOSE, flag ? 1 : 0).asError()

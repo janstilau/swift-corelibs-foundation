@@ -60,6 +60,7 @@ public protocol URLSessionDelegate : NSObjectProtocol {
      * invalid because of a systemic error or when it has been
      * explicitly invalidated, in which case the error parameter will be nil.
      */
+    // 在 Session 内部, 只是在主动调用 invalidate 的时候, 才会调用该方法.
     func urlSession(_ session: URLSession, didBecomeInvalidWithError error: Error?)
     
     /* If implemented, when a connection level authentication challenge
@@ -75,6 +76,7 @@ public protocol URLSessionDelegate : NSObjectProtocol {
 }
 
 extension URLSessionDelegate {
+    // 扩展里面实现了, 就是有了默认实现了.
     public func urlSession(_ session: URLSession, didBecomeInvalidWithError error: Error?) { }
     public func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) { }
 }

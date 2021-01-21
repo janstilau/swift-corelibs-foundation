@@ -155,8 +155,12 @@ public protocol URLProtocolClient : NSObjectProtocol {
     func urlProtocol(_ protocol: URLProtocol, didCancel challenge: URLAuthenticationChallenge)
 }
 
-// 这里, 专门有一个类, 叫做 _ProtocolClient
+// 按照道理而然, 应该是, DataTask 是 protocolClient 的实现者, 进行 data 的收集和解析.
+// 现在这些逻辑, 都到了 _ProtocolClient 中.
+// 这里面没有复用的部分, 因为 _ProtocolClient 里面, 也是直接拿到从 protocol 里面, 拿到了 task.
 internal class _ProtocolClient : NSObject {
+    // 数据方面的包装.
+    // _ProtocolClient 这个类, 主要是为了实现, protocolClient 协议的. 但是协议中是有数据的, 需要类中定义数据部分进行存储.
     var cachePolicy: URLCache.StoragePolicy = .notAllowed
     var cacheableData: [Data]?
     var cacheableResponse: URLResponse?
@@ -194,10 +198,12 @@ open class URLProtocol : NSObject {
     */
     // cachedResponse 应该由谁来去获取呢
     // sessionTask 里面有相应的逻辑, Gnu 里面, 直接传递的 nil.
-    public required init(request: URLRequest, cachedResponse: CachedURLResponse?, client: URLProtocolClient?) {
+    public required init(request: URLRequest,
+                         cachedResponse: CachedURLResponse?,
+                         client: URLProtocolClient?) {
         self._request = request
         self._cachedResponse = cachedResponse
-        self._client = client ?? _ProtocolClient()
+        self._client = client ?? _ProtocolClient() // 这里, 如果没有 client, 就使用  _ProtocolClient.
     }
 
     // 属性不固定在上面了. 还是不习惯.
@@ -413,6 +419,7 @@ open class URLProtocol : NSObject {
         // Registered protocols are consulted in reverse order.
         // reverse order, 这样保证注册的可以优先使用. 因为, 注册的是开发者的意愿, 所以先询问.
         // This behaviour makes the latest registered protocol to be consulted first
+        
         _classesLock.lock()
         let protocolClasses = protocols
         for protocolClass in protocolClasses {

@@ -408,6 +408,7 @@ open class URLSession : NSObject {
      */
     
     /* Creates a data task with the given request.  The request may have a body stream. */
+    // 默认的, 就是使用代理触发业务响应.
     open func dataTask(with request: URLRequest) -> URLSessionDataTask {
         return dataTask(with: _Request(request), behaviour: .callDelegate)
     }
@@ -425,7 +426,7 @@ open class URLSession : NSObject {
      * see <Foundation/NSURLError.h>.  The delegate, if any, will still be
      * called for authentication challenges.
      */
-    // 不关心具体的过程, 仅仅关心结果.
+    // 控制逻辑, 完全一样, 仅仅是最后的一个 type 值区分. 完全和控制逻辑脱离.
     open func dataTask(with request: URLRequest,
                        completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionDataTask {
         return dataTask(with: _Request(request), behaviour: .dataCompletionHandler(completionHandler))
@@ -488,11 +489,13 @@ open class URLSession : NSObject {
      * copied during the invocation of the completion routine.  The file
      * will be removed automatically.
      */
-    open func downloadTask(with request: URLRequest, completionHandler: @escaping (URL?, URLResponse?, Error?) -> Void) -> URLSessionDownloadTask {
+    open func downloadTask(with request: URLRequest,
+                           completionHandler: @escaping (URL?, URLResponse?, Error?) -> Void) -> URLSessionDownloadTask {
         return downloadTask(with: _Request(request), behavior: .downloadCompletionHandler(completionHandler))
     }
 
-    open func downloadTask(with url: URL, completionHandler: @escaping (URL?, URLResponse?, Error?) -> Void) -> URLSessionDownloadTask {
+    open func downloadTask(with url: URL,
+                           completionHandler: @escaping (URL?, URLResponse?, Error?) -> Void) -> URLSessionDownloadTask {
        return downloadTask(with: _Request(url), behavior: .downloadCompletionHandler(completionHandler))
     }
 
@@ -611,6 +614,11 @@ fileprivate extension URLSession {
         return task
     }
 }
+/*
+ Session, 不管最终的网络的加载, 它是一个控制类, 进行网络任务的管理.
+ 这些网络任务, 用 SessionTask 的形式各自去进行网络的加载.
+ 业务上, 分为了 data, download, upload, 各种, 又使用不同的 protocol 去处理协议.
+ */
 
 internal extension URLSession {
     /// The kind of callback / delegate behaviour of a task.
@@ -630,6 +638,7 @@ internal extension URLSession {
         case downloadCompletionHandler(URLSession._TaskRegistry.DownloadTaskCompletion)
     }
 
+    // 取出, task 对应的回调方式. 这里可以看出, task delegate 和 session delegate, 是同一个对象 
     func behaviour(for task: URLSessionTask) -> _TaskBehaviour {
         switch taskRegistry.behaviour(for: task) {
         case .dataCompletionHandler(let c): return .dataCompletionHandler(c)
@@ -643,7 +652,7 @@ internal extension URLSession {
     }
 }
 
-
+// 在 task 里面, 不直接引用的 session, 而是一个协议对象.
 internal protocol URLSessionProtocol: AnyObject {
     func add(handle: _EasyHandle)
     func remove(handle: _EasyHandle)
@@ -651,6 +660,7 @@ internal protocol URLSessionProtocol: AnyObject {
     var configuration: URLSessionConfiguration { get }
     var delegate: URLSessionDelegate? { get }
 }
+
 extension URLSession: URLSessionProtocol {
     func add(handle: _EasyHandle) {
         multiHandle.add(handle)
