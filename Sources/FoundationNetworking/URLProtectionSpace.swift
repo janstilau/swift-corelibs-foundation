@@ -1,12 +1,3 @@
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
 import SwiftFoundation
 #else
@@ -107,42 +98,37 @@ public let NSURLAuthenticationMethodClientCertificate: String = "NSURLAuthentica
 public let NSURLAuthenticationMethodServerTrust: String = "NSURLAuthenticationMethodServerTrust"
 
 
-/*!
-    @class URLProtectionSpace
-    @discussion This class represents a protection space requiring authentication.
-*/
+// A server or an area on a server,ly referred to as a realm, that requires authentication.
+/*
+ https://developer.mozilla.org/zh-cn/docs/web/http/authentication
+ RFC 7235 定义了一个 HTTP 身份验证框架，服务器可以用来针对客户端的请求发送 challenge （质询信息），客户端则可以用来提供身份验证凭证。质询与应答的工作流程如下：服务器端向客户端返回 401（Unauthorized，未被授权的） 状态码，并在  WWW-Authenticate 首部提供如何进行验证的信息，其中至少包含有一种质询方式。之后有意向证明自己身份的客户端可以在新的请求中添加 Authorization 首部字段进行验证，字段值为身份验证凭证信息。通常客户端会弹出一个密码框让用户填写，然后发送包含有恰当的 Authorization  首部的请求。
+ */
+
+// 这个类, 核心就是一个数据类.
+// 也有一些和这个数据类建立相关的代码, 但是本质上, 还是数据类.
 open class URLProtectionSpace : NSObject, NSCopying {
 
     private let _host: String
-    private let _isProxy: Bool
+    private let _isProxy: Bool // 忽略
     private let _proxyType: String?
     private let _port: Int
     private let _protocol: String?
+    // WWW-Authenticate: Basic realm="Access the img"
+    // realm 里面, 存放的是服务器端指定的 realm 里面的内容, 而不是 url 的 path/
     private let _realm: String?
-    private let _authenticationMethod: String
+    private let _authenticationMethod: String // 就是上面的那些固定值.
 
     open override func copy() -> Any {
         return copy(with: nil)
     }
     
+    // 不可变对象, 返回 self.
+    // 这里, 返回 any 是 NSCopying 的限制. 因为, NSCopy 里面, 返回值是 id 类型的. 在 swift 里面就是 Any.
     open func copy(with zone: NSZone? = nil) -> Any {
         return self // These instances are immutable.
     }
     
-    /*!
-        @method initWithHost:port:protocol:realm:authenticationMethod:
-        @abstract Initialize a protection space representing an origin server, or a realm on one
-        @param host The hostname of the server
-        @param port The port for the server
-        @param protocol The sprotocol for this server - e.g. "http", "ftp", "https"
-        @param realm A string indicating a protocol-specific subdivision
-        of a single host. For http and https, this maps to the realm
-        string in http authentication challenges. For many other protocols
-        it is unused.
-        @param authenticationMethod The authentication method to use to access this protection space -
-        valid values include nil (default method), @"digest" and @"form".
-        @result The initialized object.
-    */
+    // 置顶初始化方法, 其他所有的信息, 仅仅是 get 而已, 所有的信息, 只能是在初始化方法里面指定.
     public init(host: String, port: Int, protocol: String?, realm: String?, authenticationMethod: String?) {
         _host = host
         _port = port
@@ -153,20 +139,6 @@ open class URLProtectionSpace : NSObject, NSCopying {
         _isProxy = false
     }
     
-    /*!
-        @method initWithProxyHost:port:type:realm:authenticationMethod:
-        @abstract Initialize a protection space representing a proxy server, or a realm on one
-        @param host The hostname of the proxy server
-        @param port The port for the proxy server
-        @param type The type of proxy - e.g. "http", "ftp", "SOCKS"
-        @param realm A string indicating a protocol-specific subdivision
-        of a single host. For http and https, this maps to the realm
-        string in http authentication challenges. For many other protocols
-        it is unused.
-        @param authenticationMethod The authentication method to use to access this protection space -
-        valid values include nil (default method) and @"digest"
-        @result The initialized object.
-    */
     public init(proxyHost host: String, port: Int, type: String?, realm: String?, authenticationMethod: String?) {
         _host = host
         _port = port
@@ -177,23 +149,12 @@ open class URLProtectionSpace : NSObject, NSCopying {
         _protocol = nil
     }
 
-    /*!
-        @method realm
-        @abstract Get the authentication realm for which the protection space that
-        needs authentication
-        @discussion This is generally only available for http
-        authentication, and may be nil otherwise.
-        @result The realm string
-    */
+    // 一个 get 只读属性. 不是很明白, get privaite set 不也能够达到这个目的吗.
     open var realm: String? {
         return _realm
     }
     
-    /*!
-        @method receivesCredentialSecurely
-        @abstract Determine if the password for this protection space can be sent securely
-        @result YES if a secure authentication method or protocol will be used, NO otherwise
-    */
+    // 没太明白这个属性的意思, 不过这里有着 fallthrough 的使用.
     open var receivesCredentialSecurely: Bool {
         switch self.protocol {
         // The documentation is ambiguous whether a protection space needs to use the NSURLProtectionSpace… constants, or URL schemes.
@@ -250,11 +211,7 @@ open class URLProtectionSpace : NSObject, NSCopying {
         return _proxyType
     }
     
-    /*!
-        @method protocol
-        @abstract Get the protocol of this protection space, if not a proxy
-        @result The type string, or nil if a proxy.
-    */
+    // Swift 里面, 有着大量对于保留字的使用, 都增加了 `` 的修饰.
     open var `protocol`: String? {
         return _protocol
     }
@@ -330,10 +287,13 @@ open class URLProtectionSpace : NSObject, NSCopying {
     }
 }
 
+// 上面, 是 URLProtectionSpace 的类的信息.
+// 而 Http 的部分, 专门的到了一个 extension 里面.
 extension URLProtectionSpace {
     //an internal helper to create a URLProtectionSpace from a HTTPURLResponse 
     static func create(with response: HTTPURLResponse) -> URLProtectionSpace? {
         // Using first challenge, as we don't support multiple challenges yet
+        // 真正的创建部分, 被封装了起来.
         guard let challenge = _HTTPURLProtocol._HTTPMessage._Challenge.challenges(from: response).first else {
             return nil
         }

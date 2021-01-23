@@ -258,22 +258,10 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         return true
     }
     
-    /// Set options on the easy handle to match the given request.
-    ///
-    /// This performs a series of `curl_easy_setopt()` calls.
+    // 真正的根据当前的 request, 配置 socket 的过程.
     override func configureEasyHandle(for request: URLRequest, body: _Body) {
-        // At this point we will call the equivalent of curl_easy_setopt()
-        // to configure everything on the handle. Since we might be re-using
-        // a handle, we must be sure to set everything and not rely on default
-        // values.
         
-        //TODO: We could add a strong reference from the easy handle back to
-        // its URLSessionTask by means of CURLOPT_PRIVATE -- that would ensure
-        // that the task is always around while the handle is running.
-        // We would have to break that retain cycle once the handle completes
-        // its transfer.
-        
-        
+        // Get 请求, 增加了 body, 就算错了.
         if request.httpMethod == "GET" {
             // GET requests cannot have a body
             guard case .none = body else {
@@ -289,14 +277,11 @@ internal class _HTTPURLProtocol: _NativeProtocol {
             }
         }
         
-        // Behavior Options
         easyHandle.set(verboseModeOn: enableLibcurlDebugOutput)
         easyHandle.set(debugOutputOn: enableLibcurlDebugOutput, task: task!)
         easyHandle.set(passHeadersToDataStream: false)
         easyHandle.set(progressMeterOff: true)
         easyHandle.set(skipAllSignalHandling: true)
-        
-        // Error Options:
         easyHandle.set(errorBuffer: nil)
         easyHandle.set(failOnHTTPErrorCode: false)
         
@@ -304,13 +289,17 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         guard let url = request.url else {
             fatalError("No URL in request.")
         }
+        // Url 的设置.
         easyHandle.set(url: url)
         let session = task?.session as! URLSession
         let _config = session._configuration
         easyHandle.set(sessionConfig: _config)
         easyHandle.setAllowedProtocolsToHTTPAndHTTPS()
         easyHandle.set(preferredReceiveBufferSize: Int.max)
+        
+        
         do {
+            // Switch 多多使用这种方式, 而不是单维处理
             switch (body, try body.getBodyLength()) {
             case (.none, _):
                 if request.httpMethod == "GET" {
@@ -344,13 +333,13 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         // httpAdditionalHeaders from session configuration first and then append/update the
         // request.allHTTPHeaders so that request.allHTTPHeaders can override httpAdditionalHeaders.
         
+        // Session 的作用体现了, 作为管理者, 可以影响到了所有管理的 loading 过程.
+        // request 里面的设置, 可以覆盖管理者的默认设置.
         let httpSession = self.task?.session as! URLSession
         var httpHeaders: [AnyHashable : Any]?
-        
         if let hh = httpSession.configuration.httpAdditionalHeaders {
             httpHeaders = hh
         }
-        
         if let hh = request.allHTTPHeaderFields {
             if httpHeaders == nil {
                 httpHeaders = hh
@@ -380,19 +369,17 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         } else {
             customHeaders = headersForRequest
         }
-        
+        // 经过一系列的操作, headers 终于设置完毕了.
         easyHandle.set(customHeaders: customHeaders)
         
-        //TODO: The CURLOPT_PIPEDWAIT option is unavailable on Ubuntu 14.04 (libcurl 7.36)
-        //TODO: Introduce something like an #if, if we want to set them here
-        
-        //set the request timeout
-        //TODO: the timeout value needs to be reset on every data transfer
         
         var timeoutInterval = Int(httpSession.configuration.timeoutIntervalForRequest) * 1000
         if request.isTimeoutIntervalSet {
             timeoutInterval = Int(request.timeoutInterval) * 1000
         }
+        
+        // 这里, 就是超时的原因.
+        // 到时间了, 直接触发请求失败的行为.
         let timeoutHandler = DispatchWorkItem { [weak self] in
             guard let self = self, let task = self.task else {
                 fatalError("Timeout on a task that doesn't exist")
@@ -416,8 +403,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         guard let task = self.task else { fatalError() }
         easyHandle.timeoutTimer = _TimeoutSource(queue: task.workQueue, milliseconds: timeoutInterval, handler: timeoutHandler)
         easyHandle.set(automaticBodyDecompression: true)
-        easyHandle.set(requestMethod: request.httpMethod ?? "GET")
-        // Always set the status as it may change if a HEAD is converted to a GET.
+        easyHandle.set(requestMethod: request.httpMethod ?? "GET") // 默认是 get
         easyHandle.set(noBody: request.httpMethod == "HEAD")
     }
     

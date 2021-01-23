@@ -146,14 +146,9 @@ extension Collection where Element == _EasyHandle {
 internal extension URLSession._MultiHandle {
     /// Add an easy handle -- start its transfer.
     func add(_ handle: _EasyHandle) {
-        // If this is the first handle being added, we need to `kick` the
-        // underlying multi handle by calling `timeoutTimerFired` as
-        // described in
-        // <https://curl.haxx.se/libcurl/c/curl_multi_socket_action.html>.
-        // That will initiate the registration for timeout timer and socket
-        // readiness.
         let needsTimeout = self.easyHandles.isEmpty
         self.easyHandles.append(handle)
+        // 这里, 应该是实际触发网络请求的地方.
         try! CFURLSessionMultiHandleAddHandle(self.rawHandle, handle.rawHandle).asError()
         if needsTimeout {
             self.timeoutTimerFired()

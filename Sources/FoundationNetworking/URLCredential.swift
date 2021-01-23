@@ -1,57 +1,30 @@
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
 import SwiftFoundation
 #else
 import Foundation
 #endif
 
-/*!
-    @enum URLCredential.Persistence
-    @abstract Constants defining how long a credential will be kept around
-    @constant URLCredential.Persistence.none This credential won't be saved.
-    @constant URLCredential.Persistence.forSession This credential will only be stored for this session.
-    @constant URLCredential.Persistence.permanent This credential will be stored permanently. Note: Whereas in Mac OS X any application can access any credential provided the user gives permission, in iPhone OS an application can access only its own credentials.
-    @constant URLCredential.Persistence.synchronizable This credential will be stored permanently. Additionally, this credential will be distributed to other devices based on the owning AppleID.
-        Note: Whereas in Mac OS X any application can access any credential provided the user gives permission, on iOS an application can 
-        access only its own credentials.
-*/
+// 这些, 都是类的设计者的设定而已, 没有什么道理.
 extension URLCredential {
     public enum Persistence : UInt {
-        case none
-        case forSession
-        case permanent
+        case none // 不存
+        case forSession // 内存里面 session 可读取
+        case permanent // 存到硬盘上
         
         @available(*, deprecated, message: "Synchronizable credential storage is not available in swift-corelibs-foundation. If you rely on synchronization for your functionality, please audit your code.")
-        case synchronizable
+        case synchronizable // 存到硬盘上, 并且会和服务器端交互.
     }
 }
 
 
-/*!
-    @class URLCredential
-    @discussion This class is an immutable object representing an authentication credential.  The actual type of the credential is determined by the constructor called in the categories declared below.
-*/
+// The URL Loading System supports password-based user credentials, certificate-based user credentials, and certificate-based server credentials.
+// 这个类, 仅仅完成了 User Password 的相关概念的建设, 没有服务器证书的解析. 
 open class URLCredential : NSObject, NSSecureCoding, NSCopying {
+    
     private var _user : String
     private var _password : String
     private var _persistence : Persistence
     
-    /*!
-        @method initWithUser:password:persistence:
-        @abstract Initialize a URLCredential with a user and password
-        @param user the username
-        @param password the password
-        @param persistence enum that says to store per session, permanently or not at all
-        @result The initialized URLCredential
-     */
     public init(user: String, password: String, persistence: Persistence) {
         _user = user
         _password = password
@@ -59,15 +32,8 @@ open class URLCredential : NSObject, NSSecureCoding, NSCopying {
         super.init()
     }
     
-    /*!
-        @method credentialWithUser:password:persistence:
-        @abstract Create a new URLCredential with a user and password
-        @param user the username
-        @param password the password
-        @param persistence enum that says to store per session, permanently or not at all
-        @result The new autoreleased URLCredential
-     */
     
+    // 在这个框架里面, 一切都是用的 NS 进行的存储, 然后转为了 Swift 的数据类.
     public required init?(coder aDecoder: NSCoder) {
         guard aDecoder.allowsKeyedCoding else {
             preconditionFailure("Unkeyed coding is unsupported.")

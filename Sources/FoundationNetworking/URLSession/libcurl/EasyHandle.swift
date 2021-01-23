@@ -1,22 +1,3 @@
-// Foundation/URLSession/EasyHandle.swift - URLSession & libcurl
-//
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-// -----------------------------------------------------------------------------
-///
-/// libcurl *easy handle* wrapper.
-/// These are libcurl helpers for the URLSession API code.
-/// - SeeAlso: https://curl.haxx.se/libcurl/c/
-/// - SeeAlso: URLSession.swift
-///
-// -----------------------------------------------------------------------------
-
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
 import SwiftFoundation
 #else
@@ -29,8 +10,6 @@ import Dispatch
 
 
 
-/// Minimal wrapper around the [curl easy interface](https://curl.haxx.se/libcurl/c/)
-///
 /// An *easy handle* manages the state of a transfer inside libcurl.
 ///
 /// As such the easy handle's responsibility is implementing the HTTP
@@ -66,7 +45,7 @@ internal final class _EasyHandle {
     internal lazy var errorBuffer = [UInt8](repeating: 0, count: Int(CFURLSessionEasyErrorSize))
     internal var _config: URLSession._Configuration? = nil
     internal var _url: URL? = nil
-
+    
     init(delegate: _EasyHandleDelegate) {
         self.delegate = delegate
         setupCallbacks()
@@ -172,11 +151,11 @@ extension _EasyHandle {
             try! CFURLSession_easy_setopt_ptr(rawHandle, CFURLSessionOptionURL, UnsafeMutablePointer(mutating: $0)).asError()
         }
     }
-
+    
     func set(sessionConfig config: URLSession._Configuration) {
         _config = config
     }
-
+    
     /// Set allowed protocols
     ///
     /// - Note: This has security implications. Not limiting this, someone could
@@ -188,7 +167,7 @@ extension _EasyHandle {
         let protocols = (CFURLSessionProtocolHTTP | CFURLSessionProtocolHTTPS)
         try! CFURLSession_easy_setopt_long(rawHandle, CFURLSessionOptionPROTOCOLS, protocols).asError()
         try! CFURLSession_easy_setopt_long(rawHandle, CFURLSessionOptionREDIR_PROTOCOLS, protocols).asError()
-#if os(Android)
+        #if os(Android)
         // See https://curl.haxx.se/docs/sslcerts.html
         // For SSL on Android you need a "cacert.pem" to be
         // accessible at the path pointed to by this env var.
@@ -201,7 +180,7 @@ extension _EasyHandle {
                 try! CFURLSession_easy_setopt_ptr(rawHandle, CFURLSessionOptionCAINFO, caInfo).asError()
             }
         }
-#endif
+        #endif
         //TODO: Added in libcurl 7.45.0
         //TODO: Set default protocol for schemeless URLs
         //CURLOPT_DEFAULT_PROTOCOL available only in libcurl 7.45.0
@@ -234,11 +213,11 @@ extension _EasyHandle {
     /// - Parameter weight: values are clamped to lie between 0 and 1
     /// - SeeAlso: https://curl.haxx.se/libcurl/c/CURLOPT_STREAM_WEIGHT.html
     /// - SeeAlso: http://httpwg.org/specs/rfc7540.html#StreamPriority
-
+    
     /// Enable automatic decompression of HTTP downloads
     /// - SeeAlso: https://curl.haxx.se/libcurl/c/CURLOPT_ACCEPT_ENCODING.html
     /// - SeeAlso: https://curl.haxx.se/libcurl/c/CURLOPT_HTTP_CONTENT_DECODING.html
-
+    
     func set(automaticBodyDecompression flag: Bool) {
         if flag {
             "".withCString {
@@ -273,17 +252,17 @@ extension _EasyHandle {
     func set(requestBodyLength length: Int64) {
         try! CFURLSession_easy_setopt_int64(rawHandle, CFURLSessionOptionINFILESIZE_LARGE, length).asError()
     }
-
+    
     func set(timeout value: Int) {
-       try! CFURLSession_easy_setopt_long(rawHandle, CFURLSessionOptionTIMEOUT, numericCast(value)).asError()
+        try! CFURLSession_easy_setopt_long(rawHandle, CFURLSessionOptionTIMEOUT, numericCast(value)).asError()
     }
-
+    
     func getTimeoutIntervalSpent() -> Double {
         var timeSpent = Double()
         CFURLSession_easy_getinfo_double(rawHandle, CFURLSessionInfoTOTAL_TIME, &timeSpent)
         return timeSpent / 1000
     }
-
+    
 }
 
 fileprivate func printLibcurlDebug(handle: CFURLSessionEasyHandle, type: CInt, data: UnsafeMutablePointer<Int8>, size: Int, userInfo: UnsafeMutableRawPointer?) -> CInt {
@@ -293,7 +272,7 @@ fileprivate func printLibcurlDebug(handle: CFURLSessionEasyHandle, type: CInt, d
         let buffer = UnsafeBufferPointer<UInt8>(start: $0, count: size)
         return String(utf8Buffer: buffer)
     }) ?? "";
-
+    
     guard let userInfo = userInfo else { return 0 }
     let task = Unmanaged<URLSessionTask>.fromOpaque(userInfo).takeUnretainedValue()
     printLibcurlDebug(type: info, data: text, task: task)
@@ -385,11 +364,11 @@ internal extension _EasyHandle {
     /// errno number from last connect failure
     /// - SeeAlso: https://curl.haxx.se/libcurl/c/CURLINFO_OS_ERRNO.html
     var connectFailureErrno: Int {
-    #if os(Windows) && (arch(arm64) || arch(x86_64))
+        #if os(Windows) && (arch(arm64) || arch(x86_64))
         var errno = Int32()
-    #else
+        #else
         var errno = Int()
-    #endif
+        #endif
         try! CFURLSession_easy_getinfo_long(rawHandle, CFURLSessionInfoOS_ERRNO, &errno).asError()
         return numericCast(errno)
     }
@@ -437,13 +416,13 @@ fileprivate extension _EasyHandle {
 }
 
 fileprivate extension _EasyHandle {
-
+    
     func resetTimer() {
         //simply create a new timer with the same queue, timeout and handler
         //this must cancel the old handler and reset the timer
         timeoutTimer = _TimeoutSource(queue: timeoutTimer.queue, milliseconds: timeoutTimer.milliseconds, handler: timeoutTimer.handler)
     }
-
+    
     /// Forward the libcurl callbacks into Swift methods
     func setupCallbacks() {
         // write
@@ -466,7 +445,7 @@ fileprivate extension _EasyHandle {
             }
             return handle.fill(writeBuffer: data, size: size, nmemb: nmemb)
         }.asError()
-         
+        
         // header
         try! CFURLSession_easy_setopt_ptr(rawHandle, CFURLSessionOptionHEADERDATA, UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())).asError()
         try! CFURLSession_easy_setopt_wc(rawHandle, CFURLSessionOptionHEADERFUNCTION) { (data: UnsafeMutablePointer<Int8>, size: Int, nmemb: Int, userdata: UnsafeMutableRawPointer?) -> Int in
@@ -478,7 +457,7 @@ fileprivate extension _EasyHandle {
             try! CFURLSession_easy_getinfo_double(handle.rawHandle, CFURLSessionInfoCONTENT_LENGTH_DOWNLOAD, &length).asError()
             return handle.didReceive(headerData: data, size: size, nmemb: nmemb, contentLength: length)
         }.asError()
-
+        
         // socket options
         try! CFURLSession_easy_setopt_ptr(rawHandle, CFURLSessionOptionSOCKOPTDATA, UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())).asError()
         try! CFURLSession_easy_setopt_sc(rawHandle, CFURLSessionOptionSOCKOPTFUNCTION) { (userdata: UnsafeMutableRawPointer?, fd: CInt, type: CFURLSessionSocketType) -> CInt in
@@ -511,7 +490,7 @@ fileprivate extension _EasyHandle {
             return 0
         }).asError()
         #endif
-
+        
     }
     /// This callback function gets called by libcurl when it receives body
     /// data.
@@ -554,7 +533,7 @@ fileprivate extension _EasyHandle {
         setCookies(headerData: buffer)
         return d
     }
-
+    
     func setCookies(headerData data: Data) {
         guard let config = _config, config.httpCookieAcceptPolicy !=  HTTPCookie.AcceptPolicy.never else { return }
         guard let headerData = String(data: data, encoding: String.Encoding.utf8) else { return }
@@ -573,7 +552,7 @@ fileprivate extension _EasyHandle {
             cookieStorage.setCookies(cookies, for: _url, mainDocumentURL: nil)
         }
     }
-
+    
     /// This callback function gets called by libcurl when it wants to send data
     /// it to the network.
     ///

@@ -1,18 +1,22 @@
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
 import SwiftFoundation
 #else
 import Foundation
 #endif
 
+/*
+ This protocol is only for use with the legacy NSURLConnection and NSURLDownload classes. It should not be used with URLSession-based code, for which you respond to authentication challenges by passing URLSession.
+ AuthChallengeDisposition constants to the provided completion handler blocks.
+ */
+
+/*
+ Protocol 不断的解析数据, Response 解析完成之后, 发现需要验证, 就组装一个 URLAuthenticationChallenge, 同时, 将自己作为这个 URLAuthenticationChallenge 的 sender, 交给自己的 client 进行处理.
+ 自己作为 URLAuthenticationChallenge 的 sender , 完成下面的这些方法, 在这些方法里面, 进行状态的改变.
+ clietn 里面, 是交给 URLConnection, 或者 session 的 delegate 处理. 这些 delegate, 应该调用 sender 协议里面的方法, 标明对于这个 Challenge 的处理意见.
+ 代码继续向下执行, 根据 protocol 的状态, 判断 Challenge 的应对策略, 不过没能成功, 就 protocol stoploading.
+ 所以, 这种方式, 其实是将 组建 Challenge, 交付 Challenge, 响应 Challenge, 判断 Challenge 应对, 这四块代码, 分成了三个部分.
+ 组建, 判断 14 代码是在一起的, 但是中间的过程, 是两个协议. 现在 session 的 AuthChallengeDisposition, 将中间两个过程合在了一起, 让逻辑更加的清晰.
+ */
 public protocol URLAuthenticationChallengeSender : NSObjectProtocol {
     
     
@@ -39,7 +43,7 @@ public protocol URLAuthenticationChallengeSender : NSObjectProtocol {
      */
     func performDefaultHandling(for challenge: URLAuthenticationChallenge)
     
-
+    
     /*!
      @method rejectProtectionSpaceAndContinueWithChallenge:
      */
@@ -47,19 +51,19 @@ public protocol URLAuthenticationChallengeSender : NSObjectProtocol {
 }
 
 /*!
-    @class URLAuthenticationChallenge
-    @discussion This class represents an authentication challenge. It
-    provides all the information about the challenge, and has a method
-    to indicate when it's done.
-*/
+ @class URLAuthenticationChallenge
+ @discussion This class represents an authentication challenge. It
+ provides all the information about the challenge, and has a method
+ to indicate when it's done.
+ */
 open class URLAuthenticationChallenge : NSObject {
-
-    private let _protectionSpace: URLProtectionSpace
-    private let _proposedCredential: URLCredential?
-    private let _previousFailureCount: Int
-    private let _failureResponse: URLResponse?
+    
+    private let _protectionSpace: URLProtectionSpace // 哪块需要验证. 主要是 host + path
+    private let _proposedCredential: URLCredential? // 应对验证的证书
+    private let _previousFailureCount: Int // 失败次数
+    private let _failureResponse: URLResponse? // 原始响应, 根据这个响应, 组建的这个 Challenge
     private let _error: Error?
-    private let _sender: URLAuthenticationChallengeSender
+    private let _sender: URLAuthenticationChallengeSender // 这个 Challenge 的应对办法.
     
     /*!
      @method initWithProtectionSpace:proposedCredential:previousFailureCount:failureResponse:error:
@@ -190,19 +194,19 @@ class URLSessionAuthenticationChallengeSender : NSObject, URLAuthenticationChall
     func cancel(_ challenge: URLAuthenticationChallenge) {
         fatalError("swift-corelibs-foundation only supports URLSession; for challenges coming from URLSession, please implement the appropriate URLSessionTaskDelegate methods rather than using the sender argument.")
     }
-
+    
     func continueWithoutCredential(for challenge: URLAuthenticationChallenge) {
         fatalError("swift-corelibs-foundation only supports URLSession; for challenges coming from URLSession, please implement the appropriate URLSessionTaskDelegate methods rather than using the sender argument.")
     }
-
+    
     func use(_ credential: URLCredential, for challenge: URLAuthenticationChallenge) {
         fatalError("swift-corelibs-foundation only supports URLSession; for challenges coming from URLSession, please implement the appropriate URLSessionTaskDelegate methods rather than using the sender argument.")
     }
-
+    
     func performDefaultHandling(for challenge: URLAuthenticationChallenge) {
         fatalError("swift-corelibs-foundation only supports URLSession; for challenges coming from URLSession, please implement the appropriate URLSessionTaskDelegate methods rather than using the sender argument.")
     }
-
+    
     func rejectProtectionSpaceAndContinue(with challenge: URLAuthenticationChallenge) {
         fatalError("swift-corelibs-foundation only supports URLSession; for challenges coming from URLSession, please implement the appropriate URLSessionTaskDelegate methods rather than using the sender argument.")
     }

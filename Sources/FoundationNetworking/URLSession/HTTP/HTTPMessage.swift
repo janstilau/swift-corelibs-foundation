@@ -316,7 +316,7 @@ private extension _HTTPURLProtocol._HTTPMessage._StartLine {
             guard let status = Int(r.1), 100 <= status && status <= 999 else { return nil }
             self = .statusLine(version: version, status: status, reason: r.2)
         } else if let version = _HTTPURLProtocol._HTTPMessage._Version(versionString: r.2),
-            let URI = URL(string: r.1) {
+                  let URI = URL(string: r.1) {
             // The request method must be a token (i.e. without separators):
             let separatorIdx = r.0.unicodeScalars.firstIndex(where: { !$0.isValidMessageToken } )
             guard separatorIdx == nil else { return nil }
@@ -338,10 +338,10 @@ private extension String {
         let methodRange = scalars.startIndex..<firstSpace.lowerBound
         let uriRange = remainder.startIndex..<secondSpace.lowerBound
         let versionRange = secondSpace.upperBound..<remainder.endIndex
-      
+        
         //TODO: is this necessary? If yes, this guard needs an alternate implementation 
         //guard 0 < methodRange.count && 0 < uriRange.count && 0 < versionRange.count else { return nil } 
-
+        
         let m = String(scalars[methodRange])
         let u = String(remainder[uriRange])
         let v = String(remainder[versionRange])
@@ -357,7 +357,7 @@ private extension String {
 ///
 /// - SeeAlso: `_HTTPURLProtocol.HTTPMessage.Header.createOne(from:)`
 private func createHeaders(from lines: ArraySlice<String>) -> [_HTTPURLProtocol._HTTPMessage._Header]? {
-
+    
     var headerLines = Array(lines)
     var headers: [_HTTPURLProtocol._HTTPMessage._Header] = []
     while !headerLines.isEmpty {
@@ -583,7 +583,7 @@ private extension UnicodeScalar {
             || 0x23 <= value && value <= 0x5B
             || 0x5D <= value && value <= 0x7E
             || 0x80 <= value && value <= 0xFF
-            
+        
     }
     /// Is this a valid second octet of **quoted-pair**
     ///

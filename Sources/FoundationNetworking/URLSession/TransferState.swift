@@ -1,22 +1,3 @@
-// Foundation/URLSession/TransferState.swift - URLSession & libcurl
-//
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-// -----------------------------------------------------------------------------
-///
-/// The state of a single transfer.
-/// These are libcurl helpers for the URLSession API code.
-/// - SeeAlso: https://curl.haxx.se/libcurl/c/
-/// - SeeAlso: URLSession.swift
-///
-// -----------------------------------------------------------------------------
-
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
 import SwiftFoundation
 #else
@@ -44,7 +25,7 @@ extension _NativeProtocol {
         /// Once the headers is complete, this will contain the response
         var response: URLResponse?
         /// The body data to be sent in the request
-        let requestBodySource: _BodySource?
+        let requestBodySource: _BodySource? // 发送方.
         /// Body data received
         let bodyDataDrain: _DataDrain
         /// Describes what to do with received body data for this transfer:

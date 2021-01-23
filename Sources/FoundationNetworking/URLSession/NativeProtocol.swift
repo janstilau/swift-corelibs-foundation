@@ -17,13 +17,17 @@ internal let enableDebugOutput: Bool = {
 internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
     
     internal var easyHandle: _EasyHandle!
+    // 临时的一个下载路径, 懒加载生成.
+    // 可见, 这种 .tep 的方式, 是一种通用的方式, 在词典笔里面, 也有相关的代码.
     internal lazy var tempFileURL: URL = {
         let fileName = NSTemporaryDirectory() + NSUUID().uuidString + ".tmp"
         _ = FileManager.default.createFile(atPath: fileName, contents: nil)
         return URL(fileURLWithPath: fileName)
     }()
 
-    public required init(task: URLSessionTask, cachedResponse: CachedURLResponse?, client: URLProtocolClient?) {
+    public required init(task: URLSessionTask,
+                         cachedResponse: CachedURLResponse?,
+                         client: URLProtocolClient?) {
         self.internalState = .initial
         super.init(request: task.originalRequest!, cachedResponse: cachedResponse, client: client)
         self.task = task
@@ -54,6 +58,7 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
         }
     }
 
+    // 在这里, 通过监听当前的状态, 进行网络请求的直接控制.
     var internalState: _InternalState {
         // We manage adding / removing the easy handle and pausing / unpausing
         // here at a centralized place to make sure the internal state always
@@ -303,13 +308,12 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
         progressReporter.completedUnitCount = progress.totalBytesReceived + progress.totalBytesSent
     }
 
-    /// The data drain.
-    ///
-    /// This depends on what the delegate / completion handler need.
+    // 这里, 创建的是接收方的行为模式.
     fileprivate func createTransferBodyDataDrain() -> _DataDrain {
         guard let task = task else {
             fatalError()
         }
+        // 这里有点问题, 还需要抽取出 session 来, 才能知道 task 的行为模式.
         let s = task.session as! URLSession
         switch s.behaviour(for: task) {
         case .noDelegate:
@@ -349,7 +353,9 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
         }
     }
 
-    /// Start a new transfer
+    // 开启新的 socket 链接, 进行 request 发送, 后 response 接受的过程.
+    // startNewTransfer 里面, 主要还是做得数据的收集工作, 然后最后 configureEasyHandle 去做各个子类, 做真正的开启 socket 的过程.
+    //
     func startNewTransfer(with request: URLRequest) {
         let task = self.task!
         task.currentRequest = request
@@ -357,8 +363,11 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
             fatalError("No URL in request.")
         }
 
+        // 这里我还是认为, 如果没有多少变化的空间, 先获取到数据, 然后在写数据的处理办法的书写方式.
+        // 要比这种, 将后续处理通过闭包传出去的方式, 要清晰一点.
         task.getBody { (body) in
             self.internalState = .transferReady(self.createTransferState(url: url, body: body, workQueue: task.workQueue))
+            // 如果, authRequest 存在, 就是之前被要求了认证.
             let request = task.authRequest ?? request
             self.configureEasyHandle(for: request, body: body)
             if (task.suspendCount) < 1 {
@@ -367,7 +376,15 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
         }
     }
 
-    func resume() {
+    func resume() { // 重新开始，继续
+        
+        /*
+         Swift 里面, 枚举的关联值只要定义了, 那么一定要出现, transferReady 出现的地方, ()里面一定要接收, 哪怕是 _
+         因为枚举的值, 其实不是 case 值, 而是 case 值加上 关联值.
+         == 操作, 是和 equable 协议绑定在一起的, 所以, 在 Swift 里面, 是不能直接比较枚举值的/
+         if case 操作, 首先判断, case 值是否相等, 然后, 还有关联值抽取的功能. 这就是这个语法出现的原因了.
+         */
+        
         if case .initial = self.internalState {
             guard let r = task?.originalRequest else {
                 fatalError("Task has no original request.")
@@ -375,24 +392,30 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
             
             // 这里, 使用了缓存的数据.
             // Check if the cached response is good to use:
+            // 这里, cachedResponse 是需要事先放置进来的. 也就是说, 应该是 protocol 的使用者, 先去读取缓存, 然后传进来交给 protocol 来决定, 需不需要使用.
             if let cachedResponse = cachedResponse, canRespondFromCache(using: cachedResponse) {
                 self.internalState = .fulfillingFromCache(cachedResponse)
+                
+                // task 是存储属性, protocol 和 session 的相关概念, 已经是深度融合在一起了.
                 task?.workQueue.async {
+                    // Tells the client that a cached response is valid. 这个调用, 没有返回值, 没有结果, 所以, 仅仅是通知外界, 作为框架的一个扩展点.
                     self.client?.urlProtocol(self, cachedResponseIsValid: cachedResponse)
+                    // 直接把找到的缓存抛出去了.
                     self.client?.urlProtocol(self, didReceive: cachedResponse.response, cacheStoragePolicy: .notAllowed)
+                    // 如果, 缓存的 response 里面有 data, 把 data 抛出去. 一定要记住, response 和 data 是两码事.
                     if !cachedResponse.data.isEmpty {
                         self.client?.urlProtocol(self, didLoad: cachedResponse.data)
                     }
-                    
+                    // 通知外界结束了
                     self.client?.urlProtocolDidFinishLoading(self)
-                    
+                    // 更新状态.
                     self.internalState = .taskCompleted
                 }
-                
             } else {
                 startNewTransfer(with: r)
             }
         }
+        
 
         if case .transferReady(let transferState) = self.internalState {
             self.internalState = .transferInProgress(transferState)
@@ -406,7 +429,8 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
     /// Allows a native protocol to process a cached response. If `true` is returned, the protocol will replay the cached response instead of starting a new transfer. The default implementation invalidates the response in the cache and returns `false`.
     func canRespondFromCache(using response: CachedURLResponse) -> Bool {
         // By default, native protocols do not cache. Aggressively remove unexpected cached responses.
-        if let cache = task?.session.configuration.urlCache, let task = task as? URLSessionDataTask {
+        if let cache = task?.session.configuration.urlCache,
+           let task = task as? URLSessionDataTask {
             cache.removeCachedResponse(for: task)
         }
         return false
@@ -511,6 +535,7 @@ extension _NativeProtocol {
 
 extension _NativeProtocol {
 
+    // 以下的状态, 标志这 Socket 为 base 的网络请求的过程. 这里, libcurl, 吧 socket 的实现逻辑隐藏了.
     enum _InternalState {
         /// Task has been created, but nothing has been done, yet
         case initial

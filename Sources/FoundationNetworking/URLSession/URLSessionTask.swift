@@ -84,6 +84,7 @@ open class URLSessionTask : NSObject, NSCopying {
     // 居然还有这么一个计数器, 只有到 0 的时候, resume 才能启动 loading
     internal var suspendCount = 1
     
+    // 这里, 这么麻烦是因为, session 存的是一个协议对象, 但是很多时候, 就是使用的 URLSession 对象. 感觉这里有些过度设计.
     internal var actualSession: URLSession? { return session as? URLSession }
     internal var session: URLSessionProtocol! //change to nil when task completes
     
@@ -198,6 +199,8 @@ open class URLSessionTask : NSObject, NSCopying {
         }
         
         if let session = actualSession, let delegate = session.delegate as? URLSessionTaskDelegate {
+            // urlSession(_:task:needNewBodyStream:)
+            // 这里感觉 swift 设计的有问题啊, 最后一个很重要的 needNewBodyStream 直接被尾随闭包干掉了.
             delegate.urlSession(session, task: self) { (stream) in
                 if let stream = stream {
                     completion(.stream(stream))
@@ -809,6 +812,7 @@ extension _ProtocolClient : URLProtocolClient {
                         proposedCredential = nil
                     }
                     
+                    // 这里, sender 应该是自己才符合逻辑.
                     let authenticationChallenge = URLAuthenticationChallenge(protectionSpace: protectionSpace, proposedCredential: proposedCredential,
                                                                              previousFailureCount: task.previousFailureCount, failureResponse: response, error: nil,
                                                                              sender: URLSessionAuthenticationChallengeSender())
