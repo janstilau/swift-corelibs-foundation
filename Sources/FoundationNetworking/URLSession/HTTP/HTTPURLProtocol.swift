@@ -33,6 +33,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         return true
     }
     
+    // 这个是 libCurl 的代理方法. 这里为了什么不分出去呢.
     override func didReceive(headerData data: Data, contentLength: Int64) -> _EasyHandle._Action {
         guard case .transferInProgress(let ts) = internalState else {
             fatalError("Received header data, but no transfer in progress.")
@@ -40,9 +41,11 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         guard let task = task else {
             fatalError("Received header data but no task available.")
         }
+        
         do {
             let newTS = try ts.byAppendingHTTP(headerLine: data)
             internalState = .transferInProgress(newTS)
+            // 如果, 原来还没有解析完头数据, 现在解析完了, 那就应该触发 response did receive 的回调了.
             let didCompleteHeader = !ts.isHeaderComplete && newTS.isHeaderComplete
             if didCompleteHeader {
                 // The header is now complete, but wasn't before.
@@ -413,6 +416,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         guard let httpURLResponse = response as? HTTPURLResponse else {
             fatalError("Response was not HTTPURLResponse")
         }
+        // 如果, 可以根据 request, response 里面, 制造一个 request, 那就是应该重定向.
         if let request = redirectRequest(for: httpURLResponse, fromRequest: request) {
             return .redirectWithRequest(request)
         }
@@ -453,6 +457,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
             self.internalState = .waitingForRedirectCompletionHandler(response: response, bodyDataDrain: bodyDataDrain)
             // We need this ugly cast in order to be able to support `URLSessionTask.init()`
             session.delegateQueue.addOperation {
+                // 为什么 protocol 里面, 要使用 session 的逻辑呢.
                 delegate.urlSession(session, task: self.task!, willPerformHTTPRedirection: response as! HTTPURLResponse, newRequest: request) { [weak self] (request: URLRequest?) in
                     guard let self = self else { return }
                     self.task?.workQueue.async {
@@ -468,6 +473,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         }
     }
     
+    // 在 Http 这里, 返回了一个默认值. 感觉不太好.
     override func validateHeaderComplete(transferState: _NativeProtocol._TransferState) -> URLResponse? {
         if !transferState.isHeaderComplete {
             return HTTPURLResponse(url: transferState.url, statusCode: 200, httpVersion: "HTTP/0.9", headerFields: [:])
@@ -592,27 +598,23 @@ extension _HTTPURLProtocol {
 
 /// Response processing
 internal extension _HTTPURLProtocol {
-    /// Whenever we receive a response (i.e. a complete header) from libcurl,
-    /// this method gets called.
+    // 通知外界,  response 解析完毕.
     func didReceiveResponse() {
         guard let _ = task as? URLSessionDataTask else { return }
         guard case .transferInProgress(let ts) = self.internalState else { fatalError("Transfer not in progress.") }
         guard let response = ts.response as? HTTPURLResponse else { fatalError("Header complete, but not URL response.") }
         guard let session = task?.session as? URLSession else { fatalError() }
+        
+        // 根据 task 的回调方法的不同, 将 response 做不同的处理.
         switch session.behaviour(for: self.task!) {
         case .noDelegate:
             break
         case .taskDelegate:
-            //TODO: There's a problem with libcurl / with how we're using it.
-            // We're currently unable to pause the transfer / the easy handle:
-            // https://curl.haxx.se/mail/lib-2016-03/0222.html
-            //
-            // For now, we'll notify the delegate, but won't pause the transfer,
-            // and we'll disregard the completion handler:
             switch response.statusCode {
             case 301, 302, 303, 305...308:
                 break
             default:
+                // 真正的, 将 response 传递到了业务层了.
                 self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             }
         case .dataCompletionHandler:
@@ -622,14 +624,8 @@ internal extension _HTTPURLProtocol {
         }
     }
     
-    /// If the response is a redirect, return the new request
-    ///
-    /// RFC 7231 section 6.4 defines redirection behavior for HTTP/1.1
-    ///
-    /// - SeeAlso: <https://tools.ietf.org/html/rfc7231#section-6.4>
+    // 逻辑没有细理, 总之就是根据 response 的 code, 生成重定向的 request.
     func redirectRequest(for response: HTTPURLResponse, fromRequest: URLRequest) -> URLRequest? {
-        //TODO: Do we ever want to redirect for HEAD requests?
-        
         guard
             let location = response.value(forHeaderField: .location),
             let targetURL = URL(string: location)
@@ -642,15 +638,13 @@ internal extension _HTTPURLProtocol {
         
         // Check for a redirect:
         switch response.statusCode {
+        // 301...302 并且是 post,
         case 301...302 where request.httpMethod == "POST", 303:
             // Change "POST" into "GET" but leave other methods unchanged:
             request.httpMethod = "GET"
             request.httpBody = nil
-            
         case 301...302, 305...308:
-            // Re-use existing method:
             break
-            
         default:
             return nil
         }
@@ -693,11 +687,9 @@ internal extension _HTTPURLProtocol {
     }
 }
 
+// 专门定义了一个枚举, 来表示 特殊的 key 值.
 fileprivate extension HTTPURLResponse {
-    /// Type safe HTTP header field name(s)
     enum _Field: String {
-        /// `Location`
-        /// - SeeAlso: RFC 2616 section 14.30 <https://tools.ietf.org/html/rfc2616#section-14.30>
         case location = "Location"
     }
     

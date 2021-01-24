@@ -8,8 +8,6 @@ import Foundation
 @_implementationOnly import CFURLSessionInterface
 import Dispatch
 
-
-
 /// An *easy handle* manages the state of a transfer inside libcurl.
 ///
 /// As such the easy handle's responsibility is implementing the HTTP
@@ -33,18 +31,21 @@ import Dispatch
 /// as a result it will have to reconfigure its easy handle between
 /// transfers. An easy handle can be re-used once its transfer has
 /// completed.
-///
-/// - Note: All code assumes that it is being called on a single thread /
-/// `Dispatch` only -- it is intentionally **not** thread safe.
+
+// 虽然, 知道底层是 Socket, 但是这里 CFURLSessionEasyHandle 将这一切都封装了起来.
+// _EasyHandle 就是处理这层封装的一个类.
+// CFURLSessionEasyHandle 的使用, 非常像是 C 分割的代码.
 internal final class _EasyHandle {
+    // 这其实就是一个指针. 每一次 CFURLSessionEasyHandleInit 都会返回一个唯一的标识来.
     let rawHandle = CFURLSessionEasyHandleInit()
+    
     weak var delegate: _EasyHandleDelegate?
-    fileprivate var headerList: _CurlStringList?
+    fileprivate var headerList: _CurlStringList? // 内部类型, 其实应该就是一个 String.
     fileprivate var pauseState: _PauseState = []
     internal var timeoutTimer: _TimeoutSource!
     internal lazy var errorBuffer = [UInt8](repeating: 0, count: Int(CFURLSessionEasyErrorSize))
     internal var _config: URLSession._Configuration? = nil
-    internal var _url: URL? = nil
+    internal var _url: URL? = nil // 实际的资源位置.
     
     init(delegate: _EasyHandleDelegate) {
         self.delegate = delegate
@@ -55,24 +56,24 @@ internal final class _EasyHandle {
     }
 }
 
+// 虽然, 里面有很多数据, 但是实际上, 因为 rawHandle 是一个句柄, 所以每次都是按照句柄进行比较.
 internal func ==(lhs: _EasyHandle, rhs: _EasyHandle) -> Bool {
     return lhs.rawHandle == rhs.rawHandle
 }
-
 internal func ~=(lhs: _EasyHandle, rhs: _EasyHandle) -> Bool {
     return lhs == rhs
 }
 
 extension _EasyHandle {
     enum _Action {
-        case abort
-        case proceed
-        case pause
+        case abort // 立马结束
+        case proceed // 继续
+        case pause // 等待. 例如重定向等等.
     }
+    
     enum _WriteBufferResult {
         case abort
         case pause
-        /// Write the given number of bytes into the buffer
         case bytes(Int)
     }
 }
@@ -103,11 +104,15 @@ internal protocol _EasyHandleDelegate: AnyObject {
     func updateProgressMeter(with propgress: _EasyHandle._Progress)
 }
 
+
+
+
+
+
 extension _EasyHandle {
     func set(verboseModeOn flag: Bool) {
         try! CFURLSession_easy_setopt_long(rawHandle, CFURLSessionOptionVERBOSE, flag ? 1 : 0).asError()
     }
-    /// - SeeAlso: https://curl.haxx.se/libcurl/c/CFURLSessionOptionDEBUGFUNCTION.html
     func set(debugOutputOn flag: Bool, task: URLSessionTask) {
         if flag {
             try! CFURLSession_easy_setopt_ptr(rawHandle, CFURLSessionOptionDEBUGDATA, UnsafeMutableRawPointer(Unmanaged.passUnretained(task).toOpaque())).asError()
@@ -195,12 +200,15 @@ extension _EasyHandle {
     func set(preferredReceiveBufferSize size: Int) {
         try! CFURLSession_easy_setopt_long(rawHandle, CFURLSessionOptionBUFFERSIZE, numericCast(min(size, Int(CFURLSessionMaxWriteSize)))).asError()
     }
-    /// Set custom HTTP headers
-    /// - SeeAlso: https://curl.haxx.se/libcurl/c/CURLOPT_HTTPHEADER.html
+    
+    
+    // 传递过来的数据, 还是 String, 隔开底层的实现和外界的使用.
+    // headerlist 的数据, 每次都是整体进行替换.
     func set(customHeaders headers: [String]) {
         let list = _CurlStringList(headers)
-        try! CFURLSession_easy_setopt_ptr(rawHandle, CFURLSessionOptionHTTPHEADER, list.asUnsafeMutablePointer).asError()
-        // We need to retain the list for as long as the rawHandle is in use.
+        try! CFURLSession_easy_setopt_ptr(rawHandle,
+                                          CFURLSessionOptionHTTPHEADER,
+                                          list.asUnsafeMutablePointer).asError()
         headerList = list
     }
     ///TODO: Wait for pipelining/multiplexing. Unavailable on Ubuntu 14.0
@@ -300,7 +308,7 @@ fileprivate extension String {
 extension _EasyHandle {
     /// Send and/or receive pause state for an `EasyHandle`
     struct _PauseState : OptionSet {
-        let rawValue: Int8
+        let rawValue: Int8 // 真正的数据部分, 只有在这里.
         init(rawValue: Int8) { self.rawValue = rawValue }
         static let receivePaused = _PauseState(rawValue: 1 << 0)
         static let sendPaused = _PauseState(rawValue: 1 << 1)
@@ -382,20 +390,6 @@ internal func ~=(lhs: CFURLSessionInfo, rhs: CFURLSessionInfo) -> Bool {
     return lhs == rhs
 }
 
-extension CFURLSessionInfo {
-    internal var debugHeader: String {
-        switch self {
-        case CFURLSessionInfoTEXT:         return "                 "
-        case CFURLSessionInfoHEADER_OUT:   return "=> Send header   "
-        case CFURLSessionInfoDATA_OUT:     return "=> Send data     "
-        case CFURLSessionInfoSSL_DATA_OUT: return "=> Send SSL data "
-        case CFURLSessionInfoHEADER_IN:    return "<= Recv header   "
-        case CFURLSessionInfoDATA_IN:      return "<= Recv data     "
-        case CFURLSessionInfoSSL_DATA_IN:  return "<= Recv SSL data "
-        default:                           return "                 "
-        }
-    }
-}
 extension _EasyHandle {
     /// the URL a redirect would go to
     /// - SeeAlso: https://curl.haxx.se/libcurl/c/CURLINFO_REDIRECT_URL.html
@@ -428,7 +422,10 @@ fileprivate extension _EasyHandle {
         // write
         try! CFURLSession_easy_setopt_ptr(rawHandle, CFURLSessionOptionWRITEDATA, UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())).asError()
         
-        try! CFURLSession_easy_setopt_wc(rawHandle, CFURLSessionOptionWRITEFUNCTION) { (data: UnsafeMutablePointer<Int8>, size: Int, nmemb: Int, userdata: UnsafeMutableRawPointer?) -> Int in
+        // writeCallBack
+        // 传递过去的闭包, 会自动调用.
+        try! CFURLSession_easy_setopt_wc(rawHandle, CFURLSessionOptionWRITEFUNCTION) {
+            (data: UnsafeMutablePointer<Int8>, size: Int, nmemb: Int, userdata: UnsafeMutableRawPointer?) -> Int in
             guard let handle = _EasyHandle.from(callbackUserData: userdata) else { return 0 }
             defer {
                 handle.resetTimer()
@@ -448,7 +445,9 @@ fileprivate extension _EasyHandle {
         
         // header
         try! CFURLSession_easy_setopt_ptr(rawHandle, CFURLSessionOptionHEADERDATA, UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())).asError()
-        try! CFURLSession_easy_setopt_wc(rawHandle, CFURLSessionOptionHEADERFUNCTION) { (data: UnsafeMutablePointer<Int8>, size: Int, nmemb: Int, userdata: UnsafeMutableRawPointer?) -> Int in
+        // 到底, 如何分辨出 header 结束的逻辑, 没有表露出来, 而是在 CFURLSession_ 的内部了
+        try! CFURLSession_easy_setopt_wc(rawHandle, CFURLSessionOptionHEADERFUNCTION) {
+            (data: UnsafeMutablePointer<Int8>, size: Int, nmemb: Int, userdata: UnsafeMutableRawPointer?) -> Int in
             guard let handle = _EasyHandle.from(callbackUserData: userdata) else { return 0 }
             defer {
                 handle.resetTimer()
@@ -492,11 +491,11 @@ fileprivate extension _EasyHandle {
         #endif
         
     }
-    /// This callback function gets called by libcurl when it receives body
-    /// data.
-    ///
-    /// - SeeAlso: <https://curl.haxx.se/libcurl/c/CURLOPT_WRITEFUNCTION.html>
+    
+    // Handle 接收到数据的处理.
+    // LibCurl 会根据返回值, 进行下一步的操作.
     func didReceive(data: UnsafeMutablePointer<Int8>, size: Int, nmemb: Int) -> Int {
+        // Swift 的特性, 将逻辑转移到了 d 的 get 方法里面, 这种写法真的比之前的写法高级吗????
         let d: Int = {
             let buffer = Data(bytes: data, count: size*nmemb)
             switch delegate?.didReceive(data: buffer) {
@@ -504,7 +503,7 @@ fileprivate extension _EasyHandle {
             case .abort?: return 0
             case .pause?:
                 pauseState.insert(.receivePaused)
-                return Int(CFURLSessionWriteFuncPause)
+                return Int(CFURLSessionWriteFuncPause) // 一个特殊的值, 会影响到 LibCurl 的操作.
             case nil:
                 /* the delegate disappeared */
                 return 0
@@ -518,6 +517,7 @@ fileprivate extension _EasyHandle {
     /// - SeeAlso: <https://curl.haxx.se/libcurl/c/CURLOPT_HEADERFUNCTION.html>
     func didReceive(headerData data: UnsafeMutablePointer<Int8>, size: Int, nmemb: Int, contentLength: Double) -> Int {
         let buffer = Data(bytes: data, count: size*nmemb)
+        // 这里还是交给了上层, 也就是 protocol 层进行处理的.
         let d: Int = {
             switch delegate?.didReceive(headerData: buffer, contentLength: Int64(contentLength)) {
             case .proceed?: return size * nmemb
@@ -534,6 +534,7 @@ fileprivate extension _EasyHandle {
         return d
     }
     
+    // 进行 cookie 的存储. 这里感觉有点问题, 这是 saveCookie 的逻辑, 不应该叫做 setCookie.
     func setCookies(headerData data: Data) {
         guard let config = _config, config.httpCookieAcceptPolicy !=  HTTPCookie.AcceptPolicy.never else { return }
         guard let headerData = String(data: data, encoding: String.Encoding.utf8) else { return }
@@ -630,10 +631,11 @@ extension _EasyHandle {
 }
 
 extension _EasyHandle {
-    /// A simple wrapper / helper for libcurl’s `slist`.
-    ///
-    /// It's libcurl's way to represent an array of strings.
+    // 本质上, 应该就是一个 String 就完事了. 但是, 因为使用到了 CFURL 里面的方法, 所以使用到了 pointer.
     internal class _CurlStringList {
+        // 虽然, 这是一个 class, 但是它的数据, 是一个 pointer, 并且每次进行数据操作的时候, 这个 pointer 都会变化.
+        // 但需要这个对象, 是一个 class, 因为需要它的 deinit 方法, 去管理 rawList 的资源.
+        // 这里有点像是 C++ RAII
         fileprivate var rawList: OpaquePointer? = nil
         init() {}
         init(_ strings: [String]) {
@@ -642,17 +644,27 @@ extension _EasyHandle {
         deinit {
             CFURLSessionSListFreeAll(rawList)
         }
-    }
-}
-extension _EasyHandle._CurlStringList {
-    func append(_ string: String) {
-        string.withCString {
-            rawList = CFURLSessionSListAppend(rawList, $0)
+        
+        // 从一个 extension 里面, 转移过来的.
+        func append(_ string: String) {
+            // 要习惯于这种, 传入闭包当做下一步操作的写法.
+            // 而且, 这种写法的模式很固定, 就是尾随闭包.
+            // 如果是一个 String, 其实很简单, 就是 append 就可以了. 但是这里, 就需要每次替换.
+            // 感觉可以简单一些, 就是一个 String, 然后发送之前, 进行最终的
+            string.withCString {
+                rawList = CFURLSessionSListAppend(rawList, $0)
+            }
+        }
+        // 返回值的 ?, 是因为, map 函数本身的返回值就是 ? 的
+        var asUnsafeMutablePointer: UnsafeMutableRawPointer? {
+            return rawList.map{ UnsafeMutableRawPointer($0) }
         }
     }
-    var asUnsafeMutablePointer: UnsafeMutableRawPointer? {
-        return rawList.map{ UnsafeMutableRawPointer($0) }
-    }
+}
+
+// 我感觉, 这个类应该和上面的定义在一起. 本身这个类就很小, 没有必要分成几个部分. 并且, 这也不是对于 protoocl 的实现.
+extension _EasyHandle._CurlStringList {
+    
 }
 
 internal func ==(lhs: CFURLSessionEasyCode, rhs: CFURLSessionEasyCode) -> Bool {
@@ -662,9 +674,15 @@ internal func ~=(lhs: CFURLSessionEasyCode, rhs: CFURLSessionEasyCode) -> Bool {
     return lhs == rhs
 }
 
+// 里面其实就是一个 CFURLSessionEasyCode, 但是, 包装成为了一个类型, 就能在里面增加很多操作了.
+// 比如, 根据 CFURLSessionEasyCode 里面的 int 值, 包装成为一个 NSError 的操作, 就被包装到了 CFURLSessionEasyCode 的内部.
+// 到底这个转换, 是 NSError 的扩展, 还是 CFURLSessionEasyCode 的扩展呢.
+// 这是类的责任的划分的考虑. 不过, 在 Swift 里面, 大量的 private extension 的使用, 是当做了 CFURLSessionEasyCode 的扩展.
 extension CFURLSessionEasyCode {
+    // 这个函数, throws 了一个错误, 所以外界使用的时候, 要使用 try
+    // 这个函数感觉命名有问题, asError 应该返回一个对象, 但是这个函数命名就是 testError 的意思
     internal func asError() throws {
-        if self == CFURLSessionEasyCodeOK { return }
-        throw NSError(domain: "libcurl.Easy", code: Int(self.value))
+        if self == CFURLSessionEasyCodeOK { return } // 如果没有发生错误, 正常退出
+        throw NSError(domain: "libcurl.Easy", code: Int(self.value)) // 否则,
     }
 }

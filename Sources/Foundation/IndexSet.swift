@@ -1,21 +1,9 @@
-//===----------------------------------------------------------------------===//
-//
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2017 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See https://swift.org/LICENSE.txt for license information
-// See https://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-//===----------------------------------------------------------------------===//
-
 #if DEPLOYMENT_RUNTIME_SWIFT
 #else
-    
+
 @_exported import Foundation // Clang module
 import _SwiftFoundationOverlayShims
-    
+
 #endif
 
 extension IndexSet.Index {
@@ -160,7 +148,7 @@ public struct IndexSet : ReferenceConvertible, Equatable, BidirectionalCollectio
     
     /// Initialize an `IndexSet` with a range of integers.
     public init<R: RangeExpression>(integersIn range: R) where R.Bound == Element { 
-      self.init(integersIn: range.relative(to: 0..<Int.max))
+        self.init(integersIn: range.relative(to: 0..<Int.max))
     }
     
     /// Initialize an `IndexSet` with a single integer.
@@ -176,7 +164,7 @@ public struct IndexSet : ReferenceConvertible, Equatable, BidirectionalCollectio
     public func hash(into hasher: inout Hasher) {
         hasher.combine(_handle.map { $0 })
     }
-
+    
     /// Returns the number of integers in `self`.
     public var count: Int {
         return _handle.map { $0.count }
@@ -204,7 +192,7 @@ public struct IndexSet : ReferenceConvertible, Equatable, BidirectionalCollectio
     ///
     /// - parameter range: A subrange of `self` to view.
     public func rangeView<R: RangeExpression>(of range : R) -> RangeView where R.Bound == Element { 
-      return self.rangeView(of: range.relative(to: 0..<Int.max)) 
+        return self.rangeView(of: range.relative(to: 0..<Int.max))
     }    
     
     private func _indexOfRange(containing integer : Element) -> RangeView.Index? {
@@ -336,7 +324,7 @@ public struct IndexSet : ReferenceConvertible, Equatable, BidirectionalCollectio
     ///
     /// - parameter range: The range of integers to include.
     public func indexRange<R: RangeExpression>(in range: R) -> Range<Index> where R.Bound == Element { 
-      return self.indexRange(in: range.relative(to: 0..<Int.max))
+        return self.indexRange(in: range.relative(to: 0..<Int.max))
     }
     
     /// Returns the count of integers in `self` that intersect `range`.
@@ -346,7 +334,7 @@ public struct IndexSet : ReferenceConvertible, Equatable, BidirectionalCollectio
     
     /// Returns the count of integers in `self` that intersect `range`.
     public func count<R: RangeExpression>(in range: R) -> Int where R.Bound == Element { 
-      return self.count(in: range.relative(to: 0..<Int.max))
+        return self.count(in: range.relative(to: 0..<Int.max))
     }
     
     /// Returns `true` if `self` contains `integer`.
@@ -361,7 +349,7 @@ public struct IndexSet : ReferenceConvertible, Equatable, BidirectionalCollectio
     
     /// Returns `true` if `self` contains all of the integers in `range`.
     public func contains<R: RangeExpression>(integersIn range: R) -> Bool where R.Bound == Element { 
-      return self.contains(integersIn: range.relative(to: 0..<Int.max))
+        return self.contains(integersIn: range.relative(to: 0..<Int.max))
     }
     
     /// Returns `true` if `self` contains all of the integers in `indexSet`.
@@ -376,7 +364,7 @@ public struct IndexSet : ReferenceConvertible, Equatable, BidirectionalCollectio
     
     /// Returns `true` if `self` intersects any of the integers in `range`.
     public func intersects<R: RangeExpression>(integersIn range: R) -> Bool where R.Bound == Element { 
-      return self.intersects(integersIn: range.relative(to: 0..<Int.max))
+        return self.intersects(integersIn: range.relative(to: 0..<Int.max))
     }
     
     // MARK: -
@@ -478,7 +466,7 @@ public struct IndexSet : ReferenceConvertible, Equatable, BidirectionalCollectio
     public func union(_ other: IndexSet) -> IndexSet {
         var result: IndexSet
         var dense: IndexSet
-
+        
         // Prepare to make a copy of the more sparse IndexSet to prefer copy over repeated inserts
         if self.rangeView.count > other.rangeView.count {
             result = self
@@ -487,12 +475,12 @@ public struct IndexSet : ReferenceConvertible, Equatable, BidirectionalCollectio
             result = other
             dense = self
         }
-
+        
         // Insert each range from the less sparse IndexSet
         dense.rangeView.forEach {
             result.insert(integersIn: $0)
         }
-
+        
         return result
     }
     
@@ -599,7 +587,7 @@ public struct IndexSet : ReferenceConvertible, Equatable, BidirectionalCollectio
     
     /// Insert a range of integers into the `IndexSet`.
     public mutating func insert<R: RangeExpression>(integersIn range: R) where R.Bound == Element { 
-      self.insert(integersIn: range.relative(to: 0..<Int.max))
+        self.insert(integersIn: range.relative(to: 0..<Int.max))
     }
     
     /// Remove a range of integers from the `IndexSet`.
@@ -609,7 +597,7 @@ public struct IndexSet : ReferenceConvertible, Equatable, BidirectionalCollectio
     
     /// Remove a range of integers from the `IndexSet`.
     public mutating func remove(integersIn range: ClosedRange<Element>) { 
-      self.remove(integersIn: Range(range))
+        self.remove(integersIn: Range(range))
     }
     
     /// Returns `true` if self contains no values.
@@ -648,7 +636,7 @@ public struct IndexSet : ReferenceConvertible, Equatable, BidirectionalCollectio
     /// - parameter range: A range of integers. For each integer in the range that intersects the integers in the IndexSet, then the `includeInteger` predicate will be invoked.
     /// - parameter includeInteger: The predicate which decides if an integer will be included in the result or not.
     public func filteredIndexSet(in range : ClosedRange<Element>, includeInteger: (Element) throws -> Bool) rethrows -> IndexSet { 
-      return try self.filteredIndexSet(in: Range(range), includeInteger: includeInteger) 
+        return try self.filteredIndexSet(in: Range(range), includeInteger: includeInteger)
     }
     
     /// Returns an IndexSet filtered according to the result of `includeInteger`.
@@ -848,7 +836,7 @@ internal enum _MutablePair<ImmutableType, MutableType> {
 /// a.k.a. Box
 @usableFromInline
 internal final class _MutablePairHandle<ImmutableType : NSObject, MutableType : NSObject>
-  where ImmutableType : NSMutableCopying, MutableType : NSMutableCopying {
+where ImmutableType : NSMutableCopying, MutableType : NSMutableCopying {
     @usableFromInline
     internal var _pointer: _MutablePair<ImmutableType, MutableType>
     

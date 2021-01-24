@@ -1,21 +1,3 @@
-// Foundation/URLSession/Message.swift -  Message parsing for native protocols
-//
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2017 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-// -----------------------------------------------------------------------------
-///
-/// These are libcurl helpers for the URLSession API code.
-/// - SeeAlso: https://curl.haxx.se/libcurl/c/
-/// - SeeAlso: URLSession.swift
-///
-// -----------------------------------------------------------------------------
-
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
 import SwiftFoundation
 #else
@@ -23,10 +5,12 @@ import Foundation
 #endif
 
 extension _NativeProtocol {
-    /// A native protocol like FTP or HTTP header being parsed.
-    ///
-    /// It can either be complete (i.e. the final CR LF CR LF has been
-    /// received), or partial.
+    // 枚举, 是一个值类型. 如果里面的关联值, 是一个引用语义的, 那么每次拿到引用值, 然后调用方法修改里面的值.
+    // 如果里面的是值语义的, 那么每次, 其实是替换关联值
+    // 前一种, 不算是修改枚举的值, 后一种, 一定是修改枚举的值.
+    
+    
+    // 主要存了, 1 状态值. 2 每一行的协议头的数据.
     internal enum _ParsedResponseHeader {
         case partial(_ResponseHeaderLines)
         case complete(_ResponseHeaderLines)
@@ -34,9 +18,7 @@ extension _NativeProtocol {
             self = .partial(_ResponseHeaderLines())
         }
     }
-    /// A type safe wrapper around multiple lines of headers.
-    ///
-    /// This can be converted into an `HTTPURLResponse`.
+    
     internal struct _ResponseHeaderLines {
         let lines: [String]
         init() {
@@ -49,14 +31,11 @@ extension _NativeProtocol {
 }
 
 extension _NativeProtocol._ParsedResponseHeader {
-    /// Parse a header line passed by libcurl.
-    ///
-    /// These contain the <CRLF> ending and the final line contains nothing but
-    /// that ending.
-    /// - Returns: Returning nil indicates failure. Otherwise returns a new
-    ///     `ParsedResponseHeader` with the given line added.
+   
     func byAppending(headerLine data: Data, onHeaderCompleted: (String) -> Bool) -> _NativeProtocol._ParsedResponseHeader? {
-        // The buffer must end in CRLF
+        // 这个方法, 主要就是核实一下, 传递过来的 data 是不是合法的 data
+        // 真正的对于 lines 的操作, 放到了 _byAppending 里面
+        // 这种设计手法, 很常见. 数据的修改, 专门有一个方法, 而暴露出去的, 会将之前的一些其他逻辑实现了.
         guard 2 <= data.count &&
             data[data.endIndex - 2] == _Delimiters.CR &&
             data[data.endIndex - 1] == _Delimiters.LF
@@ -65,17 +44,15 @@ extension _NativeProtocol._ParsedResponseHeader {
         guard let line = String(data: lineBuffer, encoding: .utf8) else { return nil}
         return _byAppending(headerLine: line, onHeaderCompleted: onHeaderCompleted)
     }
-    /// Append a status line.
-    ///
-    /// If the line is empty, it marks the end of the header, and the result
-    /// is a complete header. Otherwise it's a partial header.
-    /// - Note: Appending a line to a complete header results in a partial
-    ///     header with just that line.
+    
+    // 虽然, 有着 private 的表示, 但是这里还是使用了 _ 开头作为方法的作用域的暗示.
     private func _byAppending(headerLine line: String, onHeaderCompleted: (String) -> Bool) -> _NativeProtocol._ParsedResponseHeader {
+        // 如果, 是一个空行, 就代表着之前累加的, 已经是最后的 responseHeader 了. 否则, 继续接受.
+        // 这个方法, 一定要用闭包的方式吗?? 自己写应该就不用了, 但是这个可能会被 FTP 使用, 所以留了一个扩展的点.
         if onHeaderCompleted(line) {
             switch self {
-            case .partial(let header): return .complete(header)
-            case .complete: return .partial(_NativeProtocol._ResponseHeaderLines())
+            case .partial(let header): return .complete(header) // 把 header 的值, 取出来, 包装成为新的状态, 在天回去.
+            case .complete: return .partial(_NativeProtocol._ResponseHeaderLines()) // ???, 这里应该是错了.
             }
         } else {
             let header = partialResponseHeader
@@ -100,8 +77,8 @@ private extension _NativeProtocol._ResponseHeaderLines {
     }
 }
 
-// Characters that we need for Header parsing:
-
+// 特殊的值, 专门定义了一个类型标识.
+// 他本质上来说, 就是一个 UInt8 的包装, 但是没有必要去自定义值, 所有的值, 都用类属性的方式, 提供出去.
 struct _Delimiters {
     /// *Carriage Return* symbol
     static let CR: UInt8 = 0x0d

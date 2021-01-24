@@ -8,38 +8,22 @@ import Foundation
 
 
 extension _NativeProtocol {
-    /// State related to an ongoing transfer.
-    ///
-    /// This contains headers received so far, body data received so far, etc.
-    ///
-    /// There's a strict 1-to-1 relationship between an `EasyHandle` and a
-    /// `TransferState`.
-    ///
-    /// - TODO: Might move the `EasyHandle` into this `struct` ?
-    /// - SeeAlso: `URLSessionTask.EasyHandle`
+    
+    // 这个数据类里面, 装的是网络交互的过程中, 一直改变的数据.
+    // 专门有这么一个类, 来处理网络交互的数据变化, 将交互的逻辑, 封装到内部.
+    
     internal struct _TransferState {
-        /// The URL that's being requested
+        // 资源的地址, 这个是在 init 方法里面填入的
         let url: URL
-        /// Raw headers received.
+        // 响应头数据累加过程
         let parsedResponseHeader: _ParsedResponseHeader
-        /// Once the headers is complete, this will contain the response
+        // 通过相应头数据, 生成的 response 对象.
         var response: URLResponse?
-        /// The body data to be sent in the request
-        let requestBodySource: _BodySource? // 发送方.
-        /// Body data received
+        // request 的 data 部分
+        let requestBodySource: _BodySource?
+        // response 的数据部分.
         let bodyDataDrain: _DataDrain
         /// Describes what to do with received body data for this transfer:
-    }
-}
-
-extension _NativeProtocol {
-    enum _DataDrain {
-        /// Concatenate in-memory
-        case inMemory(NSMutableData?)
-        /// Write to file
-        case toFile(URL, FileHandle?)
-        /// Do nothing. Might be forwarded to delegate
-        case ignore
     }
 }
 
@@ -52,7 +36,7 @@ extension _NativeProtocol._TransferState {
         self.requestBodySource = nil
         self.bodyDataDrain = bodyDataDrain
     }
-    /// Transfer state that sends body data and can receive body data.
+    
     init(url: URL, bodyDataDrain: _NativeProtocol._DataDrain, bodySource: _BodySource) {
         self.url = url
         self.parsedResponseHeader = _NativeProtocol._ParsedResponseHeader()
@@ -61,19 +45,13 @@ extension _NativeProtocol._TransferState {
         self.bodyDataDrain = bodyDataDrain
     }
 }
-// specific to HTTP protocol
+
+
+
 extension _HTTPURLProtocol._TransferState {
-    /// Appends a header line
-    ///
-    /// Will set the complete response once the header is complete, i.e. the
-    /// return value's `isHeaderComplete` will then by `true`.
-    ///
-    /// - Throws: When a parsing error occurs
+    
+    // headerLine 一定是一行数据, 这是 libCurl 中应该负起的责任.
     func byAppendingHTTP(headerLine data: Data) throws -> _NativeProtocol._TransferState {
-        // If the line is empty, it marks the end of the header, and the result
-        // is a complete header. Otherwise it's a partial header.
-        // - Note: Appending a line to a complete header results in a partial
-        // header with just that line.
 
         func isCompleteHeader(_ headerLine: String) -> Bool {
             return headerLine.isEmpty
@@ -87,8 +65,12 @@ extension _HTTPURLProtocol._TransferState {
             guard response != nil else {
                 throw _Error.parseCompleteHeaderError
             }
+            // 通过原来的值, 复制一份新的数据, 
             return _NativeProtocol._TransferState(url: url,
-                                                  parsedResponseHeader: _NativeProtocol._ParsedResponseHeader(), response: response, requestBodySource: requestBodySource, bodyDataDrain: bodyDataDrain)
+                                                  parsedResponseHeader: _NativeProtocol._ParsedResponseHeader(),
+                                                  response: response,
+                                                  requestBodySource: requestBodySource,
+                                                  bodyDataDrain: bodyDataDrain)
         } else {
             return _NativeProtocol._TransferState(url: url,
                                                   parsedResponseHeader: h, response: nil, requestBodySource: requestBodySource, bodyDataDrain: bodyDataDrain)
@@ -149,21 +131,25 @@ extension _NativeProtocol._TransferState {
         case parseCompleteHeaderError
     }
 
+    // 一个简单的 get 计算属性, 当 response 有值了之后自动变化.
+    // 计算属性的优势就在于, 这是一个函数. 每次都会重新计算. 不用花心思去做同步这件事情.
     var isHeaderComplete: Bool {
         return response != nil
     }
-    /// Append body data
-    ///
-    /// - Important: This will mutate the existing `NSMutableData` that the
-    ///     struct may already have in place -- copying the data is too
-    ///     expensive. This behaviour
+    
     func byAppending(bodyData buffer: Data) -> _NativeProtocol._TransferState {
         switch bodyDataDrain {
         case .inMemory(let bodyData):
+            // 这里, 不返回 self, 是因为 data 可能发生变化, 当第一次数据到达的时候, 会有一个 NSMutableData 的创建工作.
             let data: NSMutableData = bodyData ?? NSMutableData()
             data.append(buffer)
             let drain = _NativeProtocol._DataDrain.inMemory(data)
-            return _NativeProtocol._TransferState(url: url, parsedResponseHeader: parsedResponseHeader, response: response, requestBodySource: requestBodySource, bodyDataDrain: drain)
+            return _NativeProtocol._TransferState(url: url,
+                                                  parsedResponseHeader: parsedResponseHeader,
+                                                  response: response,
+                                                  requestBodySource: requestBodySource,
+                                                  bodyDataDrain: drain)
+        // 这里不会造成两次写入吗???
         case .toFile(_, let fileHandle):
              //TODO: Create / open the file for writing
              // Append to the file
@@ -181,5 +167,16 @@ extension _NativeProtocol._TransferState {
     func bySetting(bodySource newSource: _BodySource) -> _NativeProtocol._TransferState {
         return _NativeProtocol._TransferState(url: url,
                                               parsedResponseHeader: parsedResponseHeader, response: response, requestBodySource: newSource, bodyDataDrain: bodyDataDrain)
+    }
+}
+
+extension _NativeProtocol {
+    enum _DataDrain {
+        // 响应的 body 部分都在 NSMutableData 中
+        case inMemory(NSMutableData?)
+        // 响应的 body 部分, 都在 URL 对应的 File 里面
+        case toFile(URL, FileHandle?)
+        // 响应的值, 没有存
+        case ignore
     }
 }

@@ -1,21 +1,3 @@
-// Foundation/URLSession/BodySource.swift - URLSession & libcurl
-//
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-// -----------------------------------------------------------------------------
-///
-/// These are libcurl helpers for the URLSession API code.
-/// - SeeAlso: https://curl.haxx.se/libcurl/c/
-/// - SeeAlso: URLSession.swift
-///
-// -----------------------------------------------------------------------------
-
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
 import SwiftFoundation
 #else
@@ -44,20 +26,18 @@ internal func splitData(dispatchData data: DispatchData, atPosition position: In
     return (data.subdata(in: 0..<position), data.subdata(in: position..<data.count))
 }
 
-/// A (non-blocking) source for body data.
+// 这是一个协议.
+// 目前来说, 会被三个实现, 内存 data, 文件 data, stream data.
+// 这个协议, 实现的就是流读取的过程.
 internal protocol _BodySource: AnyObject {
-    /// Get the next chunck of data.
-    ///
-    /// - Returns: `.data` until the source is exhausted, at which point it will
-    /// return `.done`. Since this is non-blocking, it will return `.retryLater`
-    /// if no data is available at this point, but will be available later.
     func getNextChunk(withLength length: Int) -> _BodySourceDataChunk
 }
+
+// 在之前使用流含义的 C api 的时候, 是返回值加传出参数的方式. 现在, 通过枚举, 一次搞定了.
+// 所以, 枚举的方式, 基本上解决了传出参数的问题.
 internal enum _BodySourceDataChunk {
     case data(DispatchData)
-    /// The source is depleted.
     case done
-    /// Retry later to get more data.
     case retryLater
     case error
 }
@@ -74,27 +54,28 @@ internal final class _BodyStreamSource {
 
 extension _BodyStreamSource : _BodySource {
     func getNextChunk(withLength length: Int) -> _BodySourceDataChunk {
+        // 如果, 没有数据了, 就是完成了.
         guard inputStream.hasBytesAvailable else {
             return .done
         }
         
         let buffer = UnsafeMutableRawBufferPointer.allocate(byteCount: length, alignment: MemoryLayout<UInt8>.alignment)
-        
+        // assumingMemoryBound 这个方法, 是将一个 rawPointer, 转换成为一个特定类型的 MutablePointer
         guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
             buffer.deallocate()
             return .error
         }
         
+        // 这里, 还是使用到了原始的流读取的函数.
         let readBytes = self.inputStream.read(pointer, maxLength: length)
         if readBytes > 0 {
-            let dispatchData = DispatchData(bytesNoCopy: UnsafeRawBufferPointer(buffer), deallocator: .custom(nil, { buffer.deallocate() }))
+            let dispatchData = DispatchData(bytesNoCopy: UnsafeRawBufferPointer(buffer),
+                                            deallocator: .custom(nil, { buffer.deallocate() }))
             return .data(dispatchData.subdata(in: 0 ..< readBytes))
-        }
-        else if readBytes == 0 {
+        } else if readBytes == 0 {
             buffer.deallocate()
             return .done
-        }
-        else {
+        } else {
             buffer.deallocate()
             return .error
         }
@@ -109,6 +90,7 @@ internal final class _BodyDataSource {
     }
 }
 
+// 内存里面的 data.
 extension _BodyDataSource : _BodySource {
     enum _Error : Error {
         case unableToRewindData
@@ -131,17 +113,6 @@ extension _BodyDataSource : _BodySource {
 }
 
 
-/// A HTTP body data source backed by a file.
-///
-/// This allows non-blocking streaming of file data to the remote server.
-///
-/// The source reads data using a `DispatchIO` channel, and hence reading
-/// file data is non-blocking. It has a local buffer that it fills as calls
-/// to `getNextChunk(withLength:)` drain it.
-///
-/// - Note: Calls to `getNextChunk(withLength:)` and callbacks from libdispatch
-/// should all happen on the same (serial) queue, and hence this code doesn't
-/// have to be thread safe.
 internal final class _BodyFileSource {
     fileprivate let fileURL: URL
     fileprivate let channel: DispatchIO

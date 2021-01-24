@@ -1,20 +1,3 @@
-// Foundation/URLSession/URLSessionDelegate.swift - URLSession API
-//
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-// -----------------------------------------------------------------------------
-///
-/// URLSession API code.
-/// - SeeAlso: URLSession.swift
-///
-// -----------------------------------------------------------------------------
-
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
 import SwiftFoundation
 #else
@@ -26,20 +9,20 @@ extension URLSession {
      * Disposition options for various delegate messages
      */
     public enum AuthChallengeDisposition : Int {
-    
+        
         case useCredential /* Use the specified credential, which may be nil */
         case performDefaultHandling /* Default handling for the challenge - as if this delegate were not implemented; the credential parameter is ignored. */
         case cancelAuthenticationChallenge /* The entire request will be canceled; the credential parameter is ignored. */
         case rejectProtectionSpace /* This challenge is rejected and the next authentication protection space should be tried; the credential parameter is ignored. */
     }
-
+    
     public enum ResponseDisposition : Int {
         case cancel /* Cancel the load, this is the same as -[task cancel] */
         case allow /* Allow the load to continue */
         
         @available(*, deprecated, message: "swift-corelibs-foundation doesn't currently support turning responses into downloads dynamically.")
         case becomeDownload /* Turn this request into a download */
-
+        
         @available(*, unavailable, message: "swift-corelibs-foundation doesn't support stream tasks.")
         case becomeStream /* Turn this task into a stream task */
     }
@@ -71,8 +54,8 @@ public protocol URLSessionDelegate : NSObjectProtocol {
      * challenges).  If this delegate message is not implemented, the
      * behavior will be to use the default handling, which may involve user
      * interaction.
-     */
-    func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void)
+     */didReceive
+    func urlSession(_ session: URLSession,  challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void)
 }
 
 extension URLSessionDelegate {
@@ -81,18 +64,8 @@ extension URLSessionDelegate {
     public func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) { }
 }
 
-/* If an application has received an
- * -application:handleEventsForBackgroundURLSession:completionHandler:
- * message, the session delegate will receive this message to indicate
- * that all messages previously enqueued for this session have been
- * delivered.  At this time it is safe to invoke the previously stored
- * completion handler, or to begin any internal updates that will
- * result in invoking the completion handler.
- */
 
-/*
- * Messages related to the operation of a specific task.
- */
+// 单个任务的 delegate. 也就是, 每一个单独 loading 的相应逻辑.
 public protocol URLSessionTaskDelegate : URLSessionDelegate {
     
     /* An HTTP request is attempting to perform a redirection to a different

@@ -81,7 +81,10 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
         }
     }
 
+    // NativeProtocl 中, EasyHandle 的代理方法, 当 receive 到数据之后, 会到这里来.
     func didReceive(data: Data) -> _EasyHandle._Action {
+        // 首先, 能够接受到数据, 一定是在 transferInProgress 的状态.
+        // 这里再次核实了, Swift 里面, 枚举是用来存值的, 而不是简单的一个 Type 区分了.
         guard case .transferInProgress(var ts) = internalState else {
             fatalError("Received body data, but no transfer in progress.")
         }
@@ -92,7 +95,8 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
 
         // Note this excludes code 300 which should return the response of the redirect and not follow it.
         // For other redirect codes dont notify the delegate of the data received in the redirect response.
-        if let httpResponse = ts.response as? HTTPURLResponse, 301...308 ~= httpResponse.statusCode {
+        if let httpResponse = ts.response as? HTTPURLResponse,
+           301...308 ~= httpResponse.statusCode {
             if let _http = self as? _HTTPURLProtocol {
                 // Save the response body in case the delegate does not perform a redirect and the 3xx response
                 // including its body needs to be returned to the client.
@@ -108,6 +112,7 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
         return .proceed
     }
 
+    // 一个动词开头的函数, 返回了一个值, 感觉命名不好.
     func validateHeaderComplete(transferState: _TransferState) -> URLResponse? {
         guard transferState.isHeaderComplete else {
             fatalError("Received body data, but the header is not complete, yet.")
@@ -115,32 +120,43 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
         return nil
     }
 
+    // 统一的命名, 通过后面的 parameter guide word 区分.
+    // 在这里, 才去通知 dataTask 层面 delegate, 进行后续处理.
     fileprivate func notifyDelegate(aboutReceivedData data: Data) {
         guard let t = self.task else {
             fatalError("Cannot notify")
         }
+        
+        // Swift 的这种, 连续 && 用, 分割造成了下面的代码的难以阅读.
         if case .taskDelegate(let delegate) = t.session.behaviour(for: self.task!),
             let dataDelegate = delegate as? URLSessionDataDelegate,
-            let task = self.task as? URLSessionDataTask {
-            // Forward to the delegate:
-            guard let s = self.task?.session as? URLSession else {
-                fatalError()
-            }
-            s.delegateQueue.addOperation {
-                dataDelegate.urlSession(s, dataTask: task, didReceive: data)
-            }
+            let task = self.task as? URLSessionDataTask
+        {
+                // 在这里, 将数据交给了 taskDelegate 层面.
+                // 处理方法, 没有写在 DataTask 层面, 而是写在了 protocol 层面了.
+                guard let s = self.task?.session as? URLSession else {
+                    fatalError()
+                }
+                // 为什么, 会在对应的 queue 执行操作的原因就在这里, 专门读取里面的值, 进行了调度工作.
+                s.delegateQueue.addOperation {
+                    dataDelegate.urlSession(s, dataTask: task, didReceive: data)
+                }
         } else if case .taskDelegate(let delegate) = t.session.behaviour(for: self.task!),
-            let downloadDelegate = delegate as? URLSessionDownloadDelegate,
-            let task = self.task as? URLSessionDownloadTask {
+                  let downloadDelegate = delegate as? URLSessionDownloadDelegate,
+                  let task = self.task as? URLSessionDownloadTask
+        { // download 处理.
             guard let s = self.task?.session as? URLSession else {
                 fatalError()
             }
+            // 把数据, 写到对应的文件, 然后通知 delegate 层面.
             let fileHandle = try! FileHandle(forWritingTo: self.tempFileURL)
             _ = fileHandle.seekToEndOfFile()
             fileHandle.write(data)
             task.countOfBytesReceived  += Int64(data.count)
             s.delegateQueue.addOperation {
-                downloadDelegate.urlSession(s, downloadTask: task, didWriteData: Int64(data.count), totalBytesWritten: task.countOfBytesReceived,
+                downloadDelegate.urlSession(s, downloadTask: task,
+                                            didWriteData: Int64(data.count),
+                                            totalBytesWritten: task.countOfBytesReceived,
                                             totalBytesExpectedToWrite: task.countOfBytesExpectedToReceive)
             }
         }
@@ -156,6 +172,7 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
         }
     }
 
+    // 接受到了 头信息应该怎么处理, 需要各自的 protocol 来进行解析.
     func didReceive(headerData data: Data, contentLength: Int64) -> _EasyHandle._Action {
         NSRequiresConcreteImplementation()
     }
@@ -186,16 +203,15 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
         }
     }
 
+    // 这是 libcurl 的代理方法.
     func transferCompleted(withError error: NSError?) {
-        // At this point the transfer is complete and we can decide what to do.
-        // If everything went well, we will simply forward the resulting data
-        // to the delegate. But in case of redirects etc. we might send another
-        // request.
         guard error == nil else {
+            // 有错误, 交给 fail with 处理.
             internalState = .transferFailed
             failWith(error: error!, request: request)
             return
         }
+        
         guard case .transferInProgress(let ts) = internalState else {
             fatalError("Transfer completed, but it wasn't in progress.")
         }
@@ -227,19 +243,14 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
         }
     }
 
-    func redirectFor(request: URLRequest) {
-        NSRequiresConcreteImplementation()
-    }
-
     func completeTask() {
         guard case .transferCompleted(response: let response, bodyDataDrain: let bodyDataDrain) = self.internalState else {
             fatalError("Trying to complete the task, but its transfer isn't complete.")
         }
         task?.response = response
-        // We don't want a timeout to be triggered after this. The timeout timer needs to be cancelled.
         easyHandle.timeoutTimer = nil
-        // because we deregister the task with the session on internalState being set to taskCompleted
-        // we need to do the latter after the delegate/handler was notified/invoked
+        
+        // 取值过程, 交给上层.
         if case .inMemory(let bodyData) = bodyDataDrain {
             var data = Data()
             if let body = bodyData {
@@ -258,7 +269,12 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
         self.client?.urlProtocolDidFinishLoading(self)
         self.internalState = .taskCompleted
     }
+    
+    func redirectFor(request: URLRequest) {
+        NSRequiresConcreteImplementation()
+    }
 
+    // 默认是结束任务, 但是 Http 会根据 response 做不同的处理.
     func completionAction(forCompletedRequest request: URLRequest, response: URLResponse) -> _CompletionAction {
         return .completeTask
     }
@@ -533,45 +549,30 @@ extension _NativeProtocol {
     }
 }
 
+// _NativeProtocol 的 loading 过程中.
 extension _NativeProtocol {
 
     // 以下的状态, 标志这 Socket 为 base 的网络请求的过程. 这里, libcurl, 吧 socket 的实现逻辑隐藏了.
     enum _InternalState {
-        /// Task has been created, but nothing has been done, yet
+        // 最初的状态, 还没有进行网络及哦啊胡
         case initial
-        /// The task is being fulfilled from the cache rather than the network.
+        // 直接读取了的缓存, 通过 delegate 传递出去数据之后, 就该变为 taskCompleted 了
         case fulfillingFromCache(CachedURLResponse)
-        /// The easy handle has been fully configured. But it is not added to
-        /// the multi handle.
+        // 这种状态, 就是已经把相关的配置, 回调设置好了, 然后等待真正的 libcurl 进行网络请求了.
+        // _TransferState 里面的值, 已经是初始化了.
         case transferReady(_TransferState)
-        /// The easy handle is currently added to the multi handle
+        // 正在交互过程中, _TransferState 的值, 不断的在变化的过程中.
         case transferInProgress(_TransferState)
-        /// The transfer completed.
-        ///
-        /// The easy handle has been removed from the multi handle. This does
-        /// not necessarily mean the task completed. A task that gets
-        /// redirected will do multiple transfers.
+        // loading 交互完毕了. 存储了 response 以及对应的数据部分
         case transferCompleted(response: URLResponse, bodyDataDrain: _NativeProtocol._DataDrain)
-        /// The transfer failed.
-        ///
-        /// Same as `.transferCompleted`, but without response / body data
+        // loading 过程中, 发生了错误.
         case transferFailed
-        /// Waiting for the completion handler of the HTTP redirect callback.
-        ///
-        /// When we tell the delegate that we're about to perform an HTTP
-        /// redirect, we need to wait for the delegate to let us know what
-        /// action to take.
+        // 发生了重定向, 等待 delegate 决定如何操作.
+        // 之所以, 有这个状态是因为, delegate 要在专门的 opertaion queue 里面执行.
+        // 所以, 会出现等待的状态.
         case waitingForRedirectCompletionHandler(response: URLResponse, bodyDataDrain: _NativeProtocol._DataDrain)
-        /// Waiting for the completion handler of the 'did receive response' callback.
-        ///
-        /// When we tell the delegate that we received a response (i.e. when
-        /// we received a complete header), we need to wait for the delegate to
-        /// let us know what action to take. In this state the easy handle is
-        /// paused in order to suspend delegate callbacks.
         case waitingForResponseCompletionHandler(_TransferState)
-        /// The task is completed
-        ///
-        /// Contrast this with `.transferCompleted`.
+        // 真正的, loading 结束的标志.
         case taskCompleted
     }
 }
