@@ -1,3 +1,4 @@
+// 它是 NSObject 的子类.
 open class NSNull : NSObject, NSCopying, NSSecureCoding {
     
     open override func copy() -> Any {

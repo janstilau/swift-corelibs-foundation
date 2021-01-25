@@ -1,21 +1,10 @@
-//===----------------------------------------------------------------------===//
-//
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-//===----------------------------------------------------------------------===//
-
 @_implementationOnly import CoreFoundation
 
 #if canImport(ObjectiveC)
 import ObjectiveC
 #endif
 
+// OC 类型实现, 可以将自己转化成为 Swift 的类型.
 public protocol _StructBridgeable {
     func _bridgeToAny() -> Any
 }
@@ -69,7 +58,8 @@ internal protocol _NSBridgeable {
 extension __SwiftValue: _NSSwiftValue {}
 #endif
 
-/// - Note: This is an internal boxing value for containing abstract structures
+
+// 这个类, 专门用于 OC 到 Swfit, 或者相反的桥接转换工作.
 internal final class __SwiftValue : NSObject, NSCopying {
     public private(set) var value: Any
     
@@ -126,6 +116,7 @@ internal final class __SwiftValue : NSObject, NSCopying {
     
     #endif
     
+    // 在这个函数里面, 会根据引用对象的特征, 返回相应的 swift 数据.
     static func fetch(nonOptional object: AnyObject) -> Any {
         #if canImport(ObjectiveC)
         // You can pass the result of a `as AnyObject` expression to this method. This can have one of three results on Darwin:
@@ -150,12 +141,16 @@ internal final class __SwiftValue : NSObject, NSCopying {
         // the compiler will produce SwiftFoundation.__SwiftValue boxes rather than ObjC ones.
         #endif
         
+        // 直接, 指针判断
         if object === kCFBooleanTrue {
             return true
+            // 直接指针判断.
         } else if object === kCFBooleanFalse {
             return false
+            // 如果, obj 是包装类, 那么直接取出他包装的数据.
         } else if let container = object as? __SwiftValue {
             return container.value
+            // 如果, 这个对象实现了 _StructBridgeable 协议, 那么调用它的 _bridgeToAny 算法.
         } else if let val = object as? _StructBridgeable {
             return val._bridgeToAny()
         } else {
@@ -179,16 +174,18 @@ internal final class __SwiftValue : NSObject, NSCopying {
     
     static func store(_ value: Any) -> NSObject {
         if let val = value as? NSObject {
+            // 如果, 本身就是 NSObject 的子类, 那么直接返回
             return val
         } else if let opt = value as? Unwrappable, opt.unwrap() == nil {
+            // 这里没有看明白. 反正, 能够叫 nil 传递过去.
             return NSNull()
         } else {
             let boxed = (value as AnyObject)
             if boxed is NSObject {
                 return boxed as! NSObject
             } else {
-                return __SwiftValue(value) // Do not emit native boxes — wrap them in Swift Foundation boxes instead.                
-            }
+                // 简单的理解一下, 就是找一个盒子, 这个盒子本身是 NSObject 的子类, 然后盒子里面的数据, 是原来的 value.
+                return __SwiftValue(value) // Do not emit native boxes — wrap them in Swift Foundation boxes
         }
     }
     
