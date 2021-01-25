@@ -1,12 +1,3 @@
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-
 @_implementationOnly import CoreFoundation
 
 private var registeredDefaults = [String: Any]()
@@ -119,7 +110,7 @@ open class UserDefaults: NSObject {
             return nil
         }
     }
-
+    
     open func set(_ value: Any?, forKey defaultName: String) {
         guard let value = value else {
             CFPreferencesSetAppValue(defaultName._cfObject, nil, suite?._cfObject ?? kCFPreferencesCurrentApplication)
@@ -258,12 +249,12 @@ open class UserDefaults: NSObject {
         if let url = url {
             //FIXME: CFURLIsFileReferenceURL is limited to macOS/iOS
             #if os(macOS) || os(iOS)
-                //FIXME: no SwiftFoundation version of CFURLIsFileReferenceURL at time of writing!
-                if CFURLIsFileReferenceURL(url._cfObject) {
-                    let data = NSKeyedArchiver.archivedData(withRootObject: url._nsObject)
-                    set(data._nsObject, forKey: defaultName)
-                    return
-                }
+            //FIXME: no SwiftFoundation version of CFURLIsFileReferenceURL at time of writing!
+            if CFURLIsFileReferenceURL(url._cfObject) {
+                let data = NSKeyedArchiver.archivedData(withRootObject: url._nsObject)
+                set(data._nsObject, forKey: defaultName)
+                return
+            }
             #endif
             
             set(url.path._nsObject, forKey: defaultName)
@@ -275,7 +266,7 @@ open class UserDefaults: NSObject {
     open func register(defaults registrationDictionary: [String : Any]) {
         registeredDefaults.merge(registrationDictionary.mapValues(bridgeFromNSCFTypeIfNeeded), uniquingKeysWith: { $1 })
     }
-
+    
     open func addSuite(named suiteName: String) {
         CFPreferencesAddSuitePreferencesToApp(kCFPreferencesCurrentApplication, suiteName._cfObject)
     }
@@ -428,7 +419,7 @@ private extension UserDefaults {
                     var parsed = false
                     if let prefix = value.first, propertyListPrefixes.contains(prefix) {
                         if let data = value.data(using: .utf8),
-                            let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) {
+                           let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) {
                             
                             // If we can parse that argument as a plist, use the parsed value.
                             parsed = true
