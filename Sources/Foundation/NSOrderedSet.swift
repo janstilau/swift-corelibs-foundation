@@ -1,17 +1,43 @@
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
 
-/****************       Immutable Ordered Set   ****************/
+// A static, ordered collection of unique objects.
+
 open class NSOrderedSet: NSObject, NSCopying, NSMutableCopying, NSSecureCoding, ExpressibleByArrayLiteral {
 
-    fileprivate var _storage: NSSet
-    fileprivate var _orderedStorage: NSArray
+    fileprivate var _storage: NSSet // unique, 通过 _storage 进行保证
+    fileprivate var _orderedStorage: NSArray // ordered, 通过 NSArray 进行保证.
+    // 在类里面的各个方法里面, 都需要保持上面两个数据的同步, 用来保证这个类所表现出来的 API 的正确性.
+    
+    public convenience override init() {
+        self.init(objects: [], count: 0)
+    }
+
+    public init(objects: UnsafePointer<AnyObject>?, count cnt: Int) {
+        let storage = NSSet(objects: objects, count: cnt)
+        _storage = storage
+        
+        let orderedStorage = NSMutableArray()
+        let buffer = UnsafeBufferPointer(start: objects, count: cnt)
+        for obj in buffer where storage.contains(obj) {
+            orderedStorage.add(obj)
+        }
+        
+        _orderedStorage = orderedStorage.copy() as! NSArray
+
+        super.init()
+    }
+    
+    required public convenience init(arrayLiteral elements: Any...) {
+      self.init(array: elements)
+    }
+
+    public convenience init(objects elements: Any...) {
+      self.init(array: elements)
+    }
+    
+    internal init(storage: NSSet, orderedStorage: NSArray) {
+        _storage = storage
+        _orderedStorage = orderedStorage
+    }
     
     open override func copy() -> Any {
         return copy(with: nil)
@@ -29,6 +55,9 @@ open class NSOrderedSet: NSObject, NSCopying, NSMutableCopying, NSSecureCoding, 
         return mutableCopy(with: nil)
     }
 
+    // 如果, 是 NSOrderedSet 或者, NSMutableOrderedSet, 那么直接的进行数据的赋值就可以了.
+    // 如果, 是子类的类型, 那么根据外层表现出的序列的协议, 进行数据的收集.
+    // 对于 Apple 的这种, 可变类型, 不可变类型的区分, 在设计类的时候, 要做好相互类型之间的转化.
     open func mutableCopy(with zone: NSZone? = nil) -> Any {
         if type(of: self) === NSOrderedSet.self || type(of: self) === NSMutableOrderedSet.self {
             let mutableOrderedSet = NSMutableOrderedSet()
@@ -77,47 +106,18 @@ open class NSOrderedSet: NSObject, NSCopying, NSMutableCopying, NSSecureCoding, 
         return _storage.count
     }
 
+    // 返回值是 Any, 符合 OC 的 id.
+    // 这个类, 并不是一个泛型类. 所以
     open func object(at idx: Int) -> Any {
         _validateSubscript(idx)
         return _orderedStorage.object(at: idx)
     }
 
+    // 直接使用了 NSArray 的 api.
     open func index(of object: Any) -> Int {
         return _orderedStorage.index(of: object)
     }
 
-    public convenience override init() {
-        self.init(objects: [], count: 0)
-    }
-
-    public init(objects: UnsafePointer<AnyObject>?, count cnt: Int) {
-        let storage = NSSet(objects: objects, count: cnt)
-        _storage = storage
-        
-        let orderedStorage = NSMutableArray()
-        let buffer = UnsafeBufferPointer(start: objects, count: cnt)
-        for obj in buffer where storage.contains(obj) {
-            orderedStorage.add(obj)
-        }
-        
-        _orderedStorage = orderedStorage.copy() as! NSArray
-
-        super.init()
-    }
-    
-    required public convenience init(arrayLiteral elements: Any...) {
-      self.init(array: elements)
-    }
-
-    public convenience init(objects elements: Any...) {
-      self.init(array: elements)
-    }
-    
-    internal init(storage: NSSet, orderedStorage: NSArray) {
-        _storage = storage
-        _orderedStorage = orderedStorage
-    }
-    
     open subscript (idx: Int) -> Any {
         return object(at: idx)
     }
@@ -126,26 +126,21 @@ open class NSOrderedSet: NSObject, NSCopying, NSMutableCopying, NSSecureCoding, 
         return _orderedStorage.allObjects
     }
     
-    /// The range of indices that are valid for subscripting the ordered set.
+    // 因为, 这个类表现出的是有序的集合, 所以 _indices 是用的 Range<Int>
     internal var _indices: Range<Int> {
         return 0..<count
     }
     
-    /// Checks that an index is valid for subscripting: 0 ≤ `index` < `count`.
+    // 所有的, 需要通过 index 操作的函数, 首先都要经过数据安全性的校验
     internal func _validateSubscript(_ index: Int, file: StaticString = #file, line: UInt = #line) {
         precondition(_indices.contains(index), "\(self): Index out of bounds", file: file, line: line)
     }
 
-    /// Returns an array with the objects at the specified indexes in the
-    /// ordered set.
-    ///
-    /// - Parameter indexes: The indexes.
-    /// - Returns: An array of objects in the ascending order of their indexes
-    /// in `indexes`.
-    ///
-    /// - Complexity: O(*n*), where *n* is the number of indexes in `indexes`.
-    /// - Precondition: The indexes in `indexes` are within the
-    /// bounds of the ordered set.
+    // A collection of unique integer values that represent the indexes of elements in another collection.
+    // IndexSet 就是 Int 组成的集合, 所以, 这里可以直接用到 Array 里面.
+    // 这里, 直接使用了 map, 这就体现出了面向协议的好处在哪里.
+    // 手动实现的逻辑, 就是 Map 里面的逻辑. Map 将这层进行封装, 然后将变化转移到了传入的 Block 里面
+    // 在 OC 版本库里面, 各个容器类, 也都有自己的 map 的实现, 但是需要在自己的类中添加分类, 而在这里, 直接使用通用的, sequence 这层抽象上的 map 的定义就可以了.
     open func objects(at indexes: IndexSet) -> [Any] {
         return indexes.map { object(at: $0) }
     }
@@ -159,10 +154,14 @@ open class NSOrderedSet: NSObject, NSCopying, NSMutableCopying, NSSecureCoding, 
     }
 
     open func isEqual(to other: NSOrderedSet) -> Bool {
+        //  isEqual, 首先应该比较的是, 最明显的外层值.
         if count != other.count {
             return false
         }
         
+        // 然后才应该是各个数据的比较.
+        // 这里, 是用的 AnyHashable 的 == 进行的比较, 具体的实现细节, 要到 AnyHashable 的定义去理解.
+        // 不太明白, as 这个语法可以随便用吗, 在类的设计的时候应该做什么样的适配才可以.
         for idx in _indices {
             if let value1 = object(at: idx) as? AnyHashable,
                let value2 = other.object(at: idx) as? AnyHashable {
@@ -179,6 +178,7 @@ open class NSOrderedSet: NSObject, NSCopying, NSMutableCopying, NSSecureCoding, 
         return _storage.contains(object)
     }
 
+    // 这里, 很难理解, contains 应该是一个 sequence 的方法, 但是和上面的 open func contains(_ object: Any) -> Bool 粘合在了一起, 导致根本无法理解这里到底是什么样的一个调用的流程.
     open func intersects(_ other: NSOrderedSet) -> Bool {
         if count < other.count {
             return contains { obj in other.contains(obj) }
@@ -388,13 +388,12 @@ open class NSOrderedSet: NSObject, NSCopying, NSMutableCopying, NSSecureCoding, 
 }
 
 
-/****************       Mutable Ordered Set     ****************/
-
 open class NSMutableOrderedSet: NSOrderedSet {
     
     fileprivate var _mutableStorage: NSMutableSet
     fileprivate var _mutableOrderedStorage: NSMutableArray
     
+    // C 风格的函数.
     public override init(objects: UnsafePointer<AnyObject>?, count cnt: Int) {
         let storage = NSMutableSet(objects: objects, count: cnt)
         _mutableStorage = storage
@@ -408,6 +407,38 @@ open class NSMutableOrderedSet: NSOrderedSet {
         _mutableOrderedStorage = orderedStorage
         
         super.init(storage: storage, orderedStorage: orderedStorage)
+    }
+    
+    fileprivate init(mutableStorage: NSMutableSet, mutableOrderedStorage: NSMutableArray) {
+        _mutableStorage = mutableStorage
+        _mutableOrderedStorage = mutableOrderedStorage
+        super.init(objects: [], count: 0)
+        _storage = _mutableStorage
+        _orderedStorage = _mutableOrderedStorage
+    }
+    
+    public init(capacity numItems: Int) {
+        _mutableStorage = NSMutableSet(capacity: numItems)
+        _mutableOrderedStorage = NSMutableArray(capacity: numItems)
+        
+        super.init(objects: [], count: 0)
+        
+        // 关键所在, 让父类里面的元素, 指向 mutable 的部分.
+        // 对于 不可变类型来说, 所有的操作, 只会使用 不可变 set, array 里面的 api. 而 可变类型是不可变类型的子类, 可以进行替换.
+        _storage = _mutableStorage
+        _orderedStorage = _mutableOrderedStorage
+    }
+
+    required public convenience init(arrayLiteral elements: Any...) {
+        self.init(capacity: 0)
+
+        addObjects(from: elements)
+    }
+
+
+    public required convenience init?(coder aDecoder: NSCoder) {
+        // See NSOrderedSet.init?(coder:)
+        self.init(array: NSSet._objects(from: aDecoder, allowDecodingNonindexedArrayKey: false))
     }
     
     open func insert(_ object: Any, at idx: Int) {
@@ -432,36 +463,6 @@ open class NSMutableOrderedSet: NSOrderedSet {
         _mutableStorage.remove(objectToReplace)
         _mutableStorage.add(obj)
         _mutableOrderedStorage.replaceObject(at: idx, with: obj)
-    }
-
-    public init(capacity numItems: Int) {
-        _mutableStorage = NSMutableSet(capacity: numItems)
-        _mutableOrderedStorage = NSMutableArray(capacity: numItems)
-        
-        super.init(objects: [], count: 0)
-        
-        _storage = _mutableStorage
-        _orderedStorage = _mutableOrderedStorage
-    }
-
-    required public convenience init(arrayLiteral elements: Any...) {
-        self.init(capacity: 0)
-
-        addObjects(from: elements)
-    }
-
-
-    fileprivate init(mutableStorage: NSMutableSet, mutableOrderedStorage: NSMutableArray) {
-        _mutableStorage = mutableStorage
-        _mutableOrderedStorage = mutableOrderedStorage
-        super.init(objects: [], count: 0)
-        _storage = _mutableStorage
-        _orderedStorage = _mutableOrderedStorage
-    }
-
-    public required convenience init?(coder aDecoder: NSCoder) {
-        // See NSOrderedSet.init?(coder:)
-        self.init(array: NSSet._objects(from: aDecoder, allowDecodingNonindexedArrayKey: false))
     }
 
     open override func copy(with zone: NSZone? = nil) -> Any {
