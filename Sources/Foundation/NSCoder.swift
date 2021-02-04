@@ -1,14 +1,5 @@
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2017 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-
 extension NSCoder {
-
+    
     /// Describes the action an `NSCoder` should take when it encounters decode
     /// failures (e.g. corrupt data) for non-TopLevel decodes. Darwin platfrom
     /// supports exceptions here, and there may be other approaches supported
@@ -184,11 +175,11 @@ open class NSCoder : NSObject {
     open func version(forClassName className: String) -> Int {
         NSRequiresConcreteImplementation()
     }
-
+    
     open func decodeObject<DecodedObjectType: NSCoding>(of cls: DecodedObjectType.Type, forKey key: String) -> DecodedObjectType? where DecodedObjectType: NSObject {
         return decodeObject(of: [cls], forKey: key) as? DecodedObjectType
     }
-   
+    
     /// Decodes an object for the key, restricted to the specified `classes`.
     ///
     /// This function signature differs from Darwin Foundation in that `classes`
@@ -214,14 +205,14 @@ open class NSCoder : NSObject {
     // ----- Top-level decoding -----
     
     /*
-         On Darwin, if a coder's .decodingFailurePolicy is .raiseException, ObjC exceptions are used to interrupt execution of your init(coder:) initializer when a failure occurs during decoding.
+     On Darwin, if a coder's .decodingFailurePolicy is .raiseException, ObjC exceptions are used to interrupt execution of your init(coder:) initializer when a failure occurs during decoding.
      
-         The …TopLevel… methods below are documented to:
-         - interrupt your init(coder:) execution and immediately unwind the stack if a decoding error occurs with your .decodingFailurePolicy set to .raiseException, and
-         - still return with a thrown error, and continue program execution.
+     The …TopLevel… methods below are documented to:
+     - interrupt your init(coder:) execution and immediately unwind the stack if a decoding error occurs with your .decodingFailurePolicy set to .raiseException, and
+     - still return with a thrown error, and continue program execution.
      
-         This isn't possible in swift-corelibs-foundation, where ObjC exceptions are unavailable; either program execution is immediately interrupted, or an error is thrown, but not both. To port your code to swift-corelibs-foundations, use the replacements noted below.
-    */
+     This isn't possible in swift-corelibs-foundation, where ObjC exceptions are unavailable; either program execution is immediately interrupted, or an error is thrown, but not both. To port your code to swift-corelibs-foundations, use the replacements noted below.
+     */
     
     @available(*, unavailable, message: "The behavior of this method isn't supported in swift-corelibs-foundation. You can use decodeObject() instead on all platforms. If you would like an error to be thrown, use .decodingFailurePolicy = .setErrorAndReturn, and check the .error property.", renamed: "decodeObject()")
     open func decodeTopLevelObject() throws -> Any? {
@@ -401,22 +392,22 @@ open class NSCoder : NSObject {
     open func decodeArray(ofObjCType itemType: UnsafePointer<Int8>, count: Int, at array: UnsafeMutableRawPointer) {
         decodeValue(ofObjCType: "[\(count)\(String(cString: itemType))]", at: array)
     }
-   
+    
     /*
-    // TODO: This is disabled, as functions which return unsafe interior pointers are inherently unsafe when we have no autorelease pool. 
-    open func decodeBytes(withReturnedLength lengthp: UnsafeMutablePointer<Int>) -> UnsafeMutableRawPointer? {
-        var length: UInt32 = 0
-        withUnsafeMutablePointer(to: &length) { (ptr: UnsafeMutablePointer<UInt32>) -> Void in
-            decodeValue(ofObjCType: "I", at: unsafeBitCast(ptr, to: UnsafeMutableRawPointer.self))
-        }
-        // we cannot autorelease here so instead the pending buffers will manage the lifespan of the returned data... this is wasteful but good enough...
-        let result = UnsafeMutableRawPointer.allocate(byteCount: Int(length), alignment: MemoryLayout<Int>.alignment)
-        decodeValue(ofObjCType: "c", at: result)
-        lengthp.pointee = Int(length)
-        _pendingBuffers.append((result, Int(length)))
-        return result
-    }
-    */
+     // TODO: This is disabled, as functions which return unsafe interior pointers are inherently unsafe when we have no autorelease pool.
+     open func decodeBytes(withReturnedLength lengthp: UnsafeMutablePointer<Int>) -> UnsafeMutableRawPointer? {
+     var length: UInt32 = 0
+     withUnsafeMutablePointer(to: &length) { (ptr: UnsafeMutablePointer<UInt32>) -> Void in
+     decodeValue(ofObjCType: "I", at: unsafeBitCast(ptr, to: UnsafeMutableRawPointer.self))
+     }
+     // we cannot autorelease here so instead the pending buffers will manage the lifespan of the returned data... this is wasteful but good enough...
+     let result = UnsafeMutableRawPointer.allocate(byteCount: Int(length), alignment: MemoryLayout<Int>.alignment)
+     decodeValue(ofObjCType: "c", at: result)
+     lengthp.pointee = Int(length)
+     _pendingBuffers.append((result, Int(length)))
+     return result
+     }
+     */
     
     /// Encodes the property list `aPropertyList`.
     ///
@@ -662,11 +653,11 @@ open class NSCoder : NSObject {
     
     // TODO: This is disabled, as functions which return unsafe interior pointers are inherently unsafe when we have no autorelease pool. 
     /*
-    open func decodeBytes(forKey key: String, returnedLength lengthp: UnsafeMutablePointer<Int>?) -> UnsafePointer<UInt8>? { // returned bytes immutable!
-        NSRequiresConcreteImplementation()
-    }
-    */
-
+     open func decodeBytes(forKey key: String, returnedLength lengthp: UnsafeMutablePointer<Int>?) -> UnsafePointer<UInt8>? { // returned bytes immutable!
+     NSRequiresConcreteImplementation()
+     }
+     */
+    
     /// - Experiment: This method does not exist in Darwin Foundation. Replaces decodeBytes(forKey:).
     @available(swift, deprecated: 9999, renamed: "withDecodedUnsafeBytes(forKey:body:)")
     open func withDecodedUnsafeBufferPointer<ResultType>(forKey key: String, body: (UnsafeBufferPointer<UInt8>?) throws -> ResultType) rethrows -> ResultType {
@@ -718,7 +709,7 @@ open class NSCoder : NSObject {
     open func decodePropertyList(forKey key: String) -> Any? {
         NSRequiresConcreteImplementation()
     }
-
+    
     /// The array of coded classes allowed for secure coding.
     ///
     /// This property type differs from Darwin Foundation in that `classes` is

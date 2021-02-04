@@ -11,6 +11,7 @@ extension Dictionary : _JSONStringDictionaryDecodableMarker where Key == String,
     static var elementType: Decodable.Type { return Value.self }
 }
 
+// 实验所得, JSONEncoder, 其实没有解决循环存储的问题.
 //===----------------------------------------------------------------------===//
 // JSON Encoder
 //===----------------------------------------------------------------------===//
@@ -907,72 +908,33 @@ fileprivate class _JSONReferencingEncoder : _JSONEncoder {
 // JSON Decoder
 //===----------------------------------------------------------------------===//
 
+// Decode 应该是 Encode 的逆过程. 所以这些值, 应该是和 Encode 配置是一样的才可以.
 open class JSONDecoder {
     
-    /// The strategy to use for decoding `Date` values.
     public enum DateDecodingStrategy {
-        /// Defer to `Date` for decoding. This is the default strategy.
         case deferredToDate
-        
-        /// Decode the `Date` as a UNIX timestamp from a JSON number.
         case secondsSince1970
-        
-        /// Decode the `Date` as UNIX millisecond timestamp from a JSON number.
         case millisecondsSince1970
-        
-        /// Decode the `Date` as an ISO-8601-formatted string (in RFC 3339 format).
         @available(macOS 10.12, iOS 10.0, watchOS 3.0, tvOS 10.0, *)
         case iso8601
-        
-        /// Decode the `Date` as a string parsed by the given formatter.
         case formatted(DateFormatter)
-        
-        /// Decode the `Date` as a custom value decoded by the given closure.
         case custom((_ decoder: Decoder) throws -> Date)
     }
     
-    /// The strategy to use for decoding `Data` values.
     public enum DataDecodingStrategy {
-        /// Defer to `Data` for decoding.
         case deferredToData
-        
-        /// Decode the `Data` from a Base64-encoded string. This is the default strategy.
         case base64
-        
-        /// Decode the `Data` as a custom value decoded by the given closure.
         case custom((_ decoder: Decoder) throws -> Data)
     }
     
-    /// The strategy to use for non-JSON-conforming floating-point values (IEEE 754 infinity and NaN).
     public enum NonConformingFloatDecodingStrategy {
-        /// Throw upon encountering non-conforming values. This is the default strategy.
         case `throw`
-        
-        /// Decode the values from the given representation strings.
         case convertFromString(positiveInfinity: String, negativeInfinity: String, nan: String)
     }
     
-    /// The strategy to use for automatically changing the value of keys before decoding.
     public enum KeyDecodingStrategy {
-        /// Use the keys specified by each type. This is the default strategy.
         case useDefaultKeys
-        
-        /// Convert from "snake_case_keys" to "camelCaseKeys" before attempting to match a key with the one specified by each type.
-        ///
-        /// The conversion to upper case uses `Locale.system`, also known as the ICU "root" locale. This means the result is consistent regardless of the current user's locale and language preferences.
-        ///
-        /// Converting from snake case to camel case:
-        /// 1. Capitalizes the word starting after each `_`
-        /// 2. Removes all `_`
-        /// 3. Preserves starting and ending `_` (as these are often used to indicate private variables or other metadata).
-        /// For example, `one_two_three` becomes `oneTwoThree`. `_one_two_three_` becomes `_oneTwoThree_`.
-        ///
-        /// - Note: Using a key decoding strategy has a nominal performance cost, as each string key has to be inspected for the `_` character.
         case convertFromSnakeCase
-        
-        /// Provide a custom conversion from the key in the encoded JSON to the keys specified by the decoded types.
-        /// The full path to the current decoding position is provided for context (in case you need to locate this key within the payload). The returned key is used in place of the last component in the coding path before decoding.
-        /// If the result of the conversion is a duplicate key, then only one value will be present in the container for the type to decode from.
         case custom((_ codingPath: [CodingKey]) -> CodingKey)
         
         fileprivate static func _convertFromSnakeCase(_ stringKey: String) -> String {
@@ -1069,6 +1031,7 @@ open class JSONDecoder {
         }
         
         let decoder = _JSONDecoder(referencing: topLevel, options: self.options)
+        // Unbox 里面, 会根据 Type, 进行对应的 container 的创建.
         guard let value = try decoder.unbox(topLevel, as: type) else {
             throw DecodingError.valueNotFound(type, DecodingError.Context(codingPath: [], debugDescription: "The given data did not contain a top-level value."))
         }
@@ -1098,8 +1061,8 @@ fileprivate class _JSONDecoder : Decoder {
     
     // MARK: - Initialization
     
-    /// Initializes `self` with the given top-level container and options.
     fileprivate init(referencing container: Any, at codingPath: [CodingKey] = [], options: JSONDecoder._Options) {
+        // 默认, 吧 contianer push 到 storage. 也就是顶层中.
         self.storage = _JSONDecodingStorage()
         self.storage.push(container: container)
         self.codingPath = codingPath
@@ -1121,8 +1084,8 @@ fileprivate class _JSONDecoder : Decoder {
      {
      radius: 300
      center: keyvalue {x: 100, y: 100}
-             array [100, 100]
-             单值 10000100
+     array [100, 100]
+     单值 10000100
      }
      array 形式
      [300, {x: 100, y: 100}, 或者 [100, 100], 或者 10000100]
@@ -1199,8 +1162,7 @@ fileprivate struct _JSONDecodingStorage {
     }
 }
 
-// MARK: Decoding Containers
-
+// KeyValue 形式的解档工具类.
 fileprivate struct _JSONKeyedDecodingContainer<K : CodingKey> : KeyedDecodingContainerProtocol {
     typealias Key = K
     
@@ -1996,23 +1958,10 @@ extension _JSONDecoder : SingleValueDecodingContainer {
 // MARK: - Concrete Value Representations
 
 extension _JSONDecoder {
-    /// Returns the given value unboxed from a container.
+    
     fileprivate func unbox(_ value: Any, as type: Bool.Type) throws -> Bool? {
         guard !(value is NSNull) else { return nil }
         
-        #if DEPLOYMENT_RUNTIME_SWIFT
-        // Bridging differences require us to split implementations here
-        guard let number = __SwiftValue.store(value) as? NSNumber else {
-            throw DecodingError._typeMismatch(at: self.codingPath, expectation: type, reality: value)
-        }
-        
-        // TODO: Add a flag to coerce non-boolean numbers into Bools?
-        guard number._cfTypeID == CFBooleanGetTypeID() else {
-            throw DecodingError._typeMismatch(at: self.codingPath, expectation: type, reality: value)
-        }
-        
-        return number.boolValue
-        #else
         if let number = value as? NSNumber {
             // TODO: Add a flag to coerce non-boolean numbers into Bools?
             if number === kCFBooleanTrue as NSNumber {
@@ -2020,16 +1969,9 @@ extension _JSONDecoder {
             } else if number === kCFBooleanFalse as NSNumber {
                 return false
             }
-            
-            /* FIXME: If swift-corelibs-foundation doesn't change to use NSNumber, this code path will need to be included and tested:
-             } else if let bool = value as? Bool {
-             return bool
-             */
-            
         }
         
         throw DecodingError._typeMismatch(at: self.codingPath, expectation: type, reality: value)
-        #endif
     }
     
     fileprivate func unbox(_ value: Any, as type: Int.Type) throws -> Int? {
@@ -2272,7 +2214,9 @@ extension _JSONDecoder {
         return string
     }
     
+    // 如果 unbox 不成功, 默认是 throw error 的.
     fileprivate func unbox(_ value: Any, as type: Date.Type) throws -> Date? {
+        
         guard !(value is NSNull) else { return nil }
         
         switch self.options.dateDecodingStrategy {
@@ -2345,8 +2289,6 @@ extension _JSONDecoder {
     
     fileprivate func unbox(_ value: Any, as type: Decimal.Type) throws -> Decimal? {
         guard !(value is NSNull) else { return nil }
-        
-        // Attempt to bridge from NSDecimalNumber.
         if let decimal = value as? Decimal {
             return decimal
         } else {
@@ -2362,12 +2304,11 @@ extension _JSONDecoder {
         guard let dict = value as? NSDictionary else {
             throw DecodingError._typeMismatch(at: self.codingPath, expectation: type, reality: value)
         }
-        let elementType = type.elementType
+        let elementType = type.elementType // 可以通过类型. associateType, 取到类型.
         for (key, value) in dict {
             let key = key as! String
             self.codingPath.append(_JSONKey(stringValue: key, intValue: nil))
-            defer { self.codingPath.removeLast() }
-            
+            defer { self.codingPath.removeLast() } // defer 的大量使用.
             result[key] = try unbox_(value, as: elementType)
         }
         
@@ -2378,50 +2319,22 @@ extension _JSONDecoder {
         return try unbox_(value, as: type) as? T
     }
     
+    // 这里, 必须是 Decodable.Type. 因为上面的 T: Decodable, 所以这里可以这样写.
     fileprivate func unbox_(_ value: Any, as type: Decodable.Type) throws -> Any? {
-        #if DEPLOYMENT_RUNTIME_SWIFT
-        // Bridging differences require us to split implementations here
-        if type == Date.self {
-            guard let date = try self.unbox(value, as: Date.self) else { return nil }
-            return date
-        } else if type == Data.self {
-            guard let data = try self.unbox(value, as: Data.self) else { return nil }
-            return data
-        } else if type == URL.self {
-            guard let urlString = try self.unbox(value, as: String.self) else {
-                return nil
-            }
-            
-            guard let url = URL(string: urlString) else {
-                throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: self.codingPath,
-                                                                        debugDescription: "Invalid URL string."))
-            }
-            return url
-        } else if type == Decimal.self {
-            guard let decimal = try self.unbox(value, as: Decimal.self) else { return nil }
-            return decimal
-        } else if let stringKeyedDictType = type as? _JSONStringDictionaryDecodableMarker.Type {
-            return try self.unbox(value, as: stringKeyedDictType)
-        } else {
-            self.storage.push(container: value)
-            defer { self.storage.popContainer() }
-            return try type.init(from: self)
-        }
-        #else
+        // 所以, 最终还是根据参数, 作为 Type 的分发器.
         if type == Date.self || type == NSDate.self {
             return try self.unbox(value, as: Date.self)
         } else if type == Data.self || type == NSData.self {
             return try self.unbox(value, as: Data.self)
         } else if type == URL.self || type == NSURL.self {
+            // 如果是 Url, 就按照字符串处理, 这是在 encode 逻辑里面写好的.
             guard let urlString = try self.unbox(value, as: String.self) else {
                 return nil
             }
-            
             guard let url = URL(string: urlString) else {
                 throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: self.codingPath,
                                                                         debugDescription: "Invalid URL string."))
             }
-            
             return url
         } else if type == Decimal.self || type == NSDecimalNumber.self {
             return try self.unbox(value, as: Decimal.self)
@@ -2432,7 +2345,6 @@ extension _JSONDecoder {
             defer { self.storage.popContainer() }
             return try type.init(from: self)
         }
-        #endif
     }
 }
 

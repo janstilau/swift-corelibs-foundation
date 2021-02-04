@@ -4,16 +4,13 @@ extension JSONSerialization {
     public struct ReadingOptions : OptionSet {
         public let rawValue: UInt
         public init(rawValue: UInt) { self.rawValue = rawValue }
-        
         public static let mutableContainers = ReadingOptions(rawValue: 1 << 0)
         public static let mutableLeaves = ReadingOptions(rawValue: 1 << 1)
         public static let allowFragments = ReadingOptions(rawValue: 1 << 2)
     }
-    
     public struct WritingOptions : OptionSet {
         public let rawValue: UInt
         public init(rawValue: UInt) { self.rawValue = rawValue }
-        
         public static let prettyPrinted = WritingOptions(rawValue: 1 << 0)
         public static let sortedKeys = WritingOptions(rawValue: 1 << 1)
         public static let fragmentsAllowed = WritingOptions(rawValue: 1 << 2)
@@ -22,8 +19,6 @@ extension JSONSerialization {
 }
 
 extension JSONSerialization {
-    // Structures with container nesting deeper than this limit are not valid if passed in in-memory for validation, nor if they are read during deserialization.
-    // This matches Darwin Foundation's validation behavior.
     fileprivate static let maximumRecursionDepth = 512
 }
 
@@ -36,31 +31,27 @@ extension JSONSerialization {
  or `Foundation.NSNull`
  - All dictionary keys are `Swift.String`s
  - `NSNumber`s are not NaN or infinity
+ 
+ 就如同 propertylist 一样, 存储的值, 是有限制的.
  */
 
 open class JSONSerialization : NSObject {
     
-    /* Determines whether the given object can be converted to JSON.
-     Other rules may apply. Calling this method or attempting a conversion are the definitive ways
-     to tell if a given object can be converted to JSON data.
-     - parameter obj: The object to test.
-     - returns: `true` if `obj` can be converted to JSON, otherwise `false`.
-     */
     open class func isValidJSONObject(_ obj: Any) -> Bool {
         var recursionDepth = 0
         
-        // TODO: - revisit this once bridging story gets fully figured out
+        // 这个函数, 必然有递归. 并且, 记录了循环次数.
         func isValidJSONObjectInternal(_ obj: Any?) -> Bool {
-            // Match Darwin Foundation in not considering a deep object valid.
+            // 大量使用了 defer.
             guard recursionDepth < JSONSerialization.maximumRecursionDepth else { return false }
             recursionDepth += 1
             defer { recursionDepth -= 1 }
             
-            // Emulate the SE-0140 behavior bridging behavior for nils
             guard let obj = obj else {
                 return true
             }
             
+            // 这里面, 没有真实的值的转化, 大部分都是类型判断.
             if !(obj is _NSNumberCastingWithoutBridging) {
                 if obj is String || obj is NSNull || obj is Int || obj is Bool || obj is UInt ||
                     obj is Int8 || obj is Int16 || obj is Int32 || obj is Int64 ||
@@ -82,7 +73,6 @@ open class JSONSerialization : NSObject {
                 return number.isFinite
             }
             
-            // object is Swift.Array
             if let array = obj as? [Any?] {
                 for element in array {
                     guard isValidJSONObjectInternal(element) else {
@@ -92,7 +82,6 @@ open class JSONSerialization : NSObject {
                 return true
             }
             
-            // object is Swift.Dictionary
             if let dictionary = obj as? [String: Any?] {
                 for (_, value) in dictionary {
                     guard isValidJSONObjectInternal(value) else {
@@ -118,7 +107,7 @@ open class JSONSerialization : NSObject {
             return false
         }
         
-        // top level object must be an Swift.Array or Swift.Dictionary
+        // 顶层数据, 必须是数组或者字典.
         guard obj is [Any?] || obj is [String: Any?] else {
             return false
         }
@@ -126,13 +115,12 @@ open class JSONSerialization : NSObject {
         return isValidJSONObjectInternal(obj)
     }
     
-    /* Generate JSON data from a Foundation object. If the object will not produce valid JSON then an exception will be thrown. Setting the NSJSONWritingPrettyPrinted option will generate JSON with whitespace designed to make the output more readable. If that option is not set, the most compact possible JSON will be generated. If an error occurs, the error parameter will be set and the return value will be nil. The resulting data is a encoded in UTF-8.
-     */
     internal class func _data(withJSONObject value: Any, options opt: WritingOptions, stream: Bool) throws -> Data {
         var jsonStr = [UInt8]()
         
         var writer = JSONWriter(
             options: opt,
+            // writer 表示, 产生了数据之后, 应该怎么办.
             writer: { (str: String?) in
                 if let str = str {
                     jsonStr.append(contentsOf: str.utf8)
@@ -155,6 +143,7 @@ open class JSONSerialization : NSObject {
             try writer.serializeJSON(value)
         }
         
+        // 所有的数据, 都放到 jsonStr 里面, 最后变为一个 Data.
         let count = jsonStr.count
         return Data(bytes: &jsonStr, count: count)
     }
@@ -167,7 +156,9 @@ open class JSONSerialization : NSObject {
      The data must be in one of the 5 supported encodings listed in the JSON specification: UTF-8, UTF-16LE, UTF-16BE, UTF-32LE, UTF-32BE. The data may or may not have a BOM. The most efficient encoding to use for parsing is UTF-8, so if you have a choice in encoding the data passed to this method, use UTF-8.
      */
     open class func jsonObject(with data: Data, options opt: ReadingOptions = []) throws -> Any {
-        return try data.withUnsafeBytes { (rawBuffer: UnsafeRawBufferPointer) -> Any in
+        return try data.withUnsafeBytes {
+            
+            (rawBuffer: UnsafeRawBufferPointer) -> Any in
             let encoding: String.Encoding
             let bytes = rawBuffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
             let buffer: UnsafeBufferPointer<UInt8>
@@ -182,6 +173,9 @@ open class JSONSerialization : NSObject {
             
             let source = JSONReader.UnicodeSource(buffer: buffer, encoding: encoding)
             let reader = JSONReader(source: source)
+            // 到这里, reader 的初始化就完成了.
+            
+            // 然后就是真正的解析的过程.
             if let (object, _) = try reader.parseObject(0, options: opt, recursionDepth: 0) {
                 return object
             }
@@ -191,6 +185,7 @@ open class JSONSerialization : NSObject {
             else if opt.contains(.allowFragments), let (value, _) = try reader.parseValue(0, options: opt, recursionDepth: 0) {
                 return value
             }
+            
             throw NSError(domain: NSCocoaErrorDomain, code: CocoaError.propertyListReadCorrupt.rawValue, userInfo: [
                 NSDebugDescriptionErrorKey : "JSON text did not start with array or object and option to allow fragments not set."
             ])
@@ -265,6 +260,7 @@ internal extension JSONSerialization {
         return .utf8
     }
     
+    // 这个, 就是分析 JSON 数据的头信息了.
     static func parseBOM(_ bytes: UnsafePointer<UInt8>, length: Int) -> (encoding: String.Encoding, skipLength: Int)? {
         if length >= 2 {
             switch (bytes[0], bytes[1]) {
@@ -292,12 +288,13 @@ internal extension JSONSerialization {
 }
 
 //MARK: - JSONSerializer
+// JSON 的输出逻辑.
 private struct JSONWriter {
     
-    var indent = 0
-    let pretty: Bool
-    let sortedKeys: Bool
-    let withoutEscapingSlashes: Bool
+    var indent = 0 // 记录当前的缩进等级
+    let pretty: Bool // 是否格式化
+    let sortedKeys: Bool // 是否排序
+    let withoutEscapingSlashes: Bool // 是否 slash 进行特殊处理.
     let writer: (String?) -> Void
     
     init(options: JSONSerialization.WritingOptions, writer: @escaping (String?) -> Void) {
@@ -307,6 +304,7 @@ private struct JSONWriter {
         self.writer = writer
     }
     
+    // 根据类型, 输出值.
     mutating func serializeJSON(_ object: Any?) throws {
         
         var toSerialize = object
@@ -346,6 +344,8 @@ private struct JSONWriter {
             writer(num.description)
         case let num as UInt64:
             writer(num.description)
+        // 数值, 按照数值的字符串化进行输出.
+        
         case let array as Array<Any?>:
             try serializeArray(array)
         case let dict as Dictionary<AnyHashable, Any?>:
@@ -369,7 +369,7 @@ private struct JSONWriter {
     }
     
     func serializeString(_ str: String) throws {
-        writer("\"")
+        writer("\"") // 先把 " 写上去. JSON 的字符串必须 "" 包裹.
         for scalar in str.unicodeScalars {
             switch scalar {
             case "\"":
@@ -389,6 +389,7 @@ private struct JSONWriter {
                 writer("\\r") // U+000D carriage return
             case "\t":
                 writer("\\t") // U+0009 tab
+            // 上面, 对于一些特殊字符, 有着特殊的书写方式.
             case "\u{0}"..."\u{f}":
                 writer("\\u000\(String(scalar.value, radix: 16))") // U+0000 to U+000F
             case "\u{10}"..."\u{1f}":
@@ -397,6 +398,7 @@ private struct JSONWriter {
                 writer(String(scalar))
             }
         }
+        // 写最后的"
         writer("\"")
     }
     
@@ -425,10 +427,10 @@ private struct JSONWriter {
     }
     
     mutating func serializeArray(_ array: [Any?]) throws {
-        writer("[")
+        writer("[") // 先写 [
         if pretty {
             writer("\n")
-            incIndent()
+            incIndent() // 只有在写对象的时候, 才增加缩进.
         }
         
         var first = true
@@ -441,9 +443,9 @@ private struct JSONWriter {
                 writer(",")
             }
             if pretty {
-                writeIndent()
+                writeIndent() // 格式化输出, 书写缩进.
             }
-            try serializeJSON(elem)
+            try serializeJSON(elem) // 递归调用输出.
         }
         if pretty {
             writer("\n")
@@ -473,7 +475,7 @@ private struct JSONWriter {
             } else {
                 writer(",")
             }
-            
+            // 先写 key, 然后 :, 然后 value
             if let key = key as? String {
                 try serializeString(key)
             } else {
@@ -511,6 +513,7 @@ private struct JSONWriter {
         writer("}")
     }
     
+    // 调用闭包, 把 Null 写出去.
     func serializeNull() throws {
         writer("null")
     }
@@ -549,6 +552,7 @@ private struct JSONReader {
         0x20, // Space
     ]
     
+    // 一个特殊的对象, 存储所有的特殊值.
     struct Structure {
         static let BeginArray: UInt8     = 0x5B // [
         static let EndArray: UInt8       = 0x5D // ]
@@ -572,6 +576,7 @@ private struct JSONReader {
             self.buffer = buffer
             self.encoding = encoding
             
+            // 根据 encoding, 要分析出步长来.
             self.step = {
                 switch encoding {
                 case .utf8:
@@ -798,7 +803,7 @@ private struct JSONReader {
         return (UTF16.CodeUnit(value), index)
     }
     
-    //MARK: - Number parsing
+    // 特殊值, 提前写到类里面.
     private static let ZERO = UInt8(ascii: "0")
     private static let ONE = UInt8(ascii: "1")
     private static let NINE = UInt8(ascii: "9")
@@ -1012,6 +1017,7 @@ private struct JSONReader {
     }
     
     func parseObjectMember(_ input: Index, options opt: JSONSerialization.ReadingOptions, recursionDepth: Int) throws -> (String, Any, Index)? {
+        // 大量的使用了 guard. 简化逻辑.
         guard let (name, index) = try parseString(input) else {
             throw NSError(domain: NSCocoaErrorDomain, code: CocoaError.propertyListReadCorrupt.rawValue, userInfo: [
                 NSDebugDescriptionErrorKey : "Missing object key at location \(source.distanceFromStart(input))"
