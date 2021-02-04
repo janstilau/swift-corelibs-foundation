@@ -1,43 +1,33 @@
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-
 @_implementationOnly import CoreFoundation
 
 /**
  `Date` represents a single point in time.
  
  A `Date` is independent of a particular calendar or time zone. To represent a `Date` to a user, you must interpret it in the context of a `Calendar`.
+ 时间, 就是一个  Double 值, 和时区无关的.
  */
+// 整个类, 就是对于时间戳的操作而已.
 public struct Date : ReferenceConvertible, Comparable, Equatable {
     public typealias ReferenceType = NSDate
     
+    // 内部数据类型, 使用 _开头, 表示不应该暴露出去.
     fileprivate var _time: TimeInterval
     
-    /// The number of seconds from 1 January 1970 to the reference date, 1 January 2001.
+    // 之所以这么奇怪的常量, 是因为, 现在的系统, 是从 2001 开始计时的.
     public static let timeIntervalBetween1970AndReferenceDate: TimeInterval = 978307200.0
     
-    /// The interval between 00:00:00 UTC on 1 January 2001 and the current date and time.
     public static var timeIntervalSinceReferenceDate: TimeInterval {
         return CFAbsoluteTimeGetCurrent()
     }
     
-    /// Returns a `Date` initialized to the current date and time.
     public init() {
         _time = CFAbsoluteTimeGetCurrent()
     }
     
-    /// Returns a `Date` initialized relative to the current date and time by a given number of seconds.
     public init(timeIntervalSinceNow: TimeInterval) {
         self.init(timeIntervalSinceReferenceDate: timeIntervalSinceNow + CFAbsoluteTimeGetCurrent())
     }
     
-    /// Returns a `Date` initialized relative to 00:00:00 UTC on 1 January 1970 by a given number of seconds.
     public init(timeIntervalSince1970: TimeInterval) {
         self.init(timeIntervalSinceReferenceDate: timeIntervalSince1970 - Date.timeIntervalBetween1970AndReferenceDate)
     }
@@ -123,20 +113,10 @@ public struct Date : ReferenceConvertible, Comparable, Equatable {
         self += timeInterval
     }
     
-    /**
-     Creates and returns a Date value representing a date in the distant future.
-     
-     The distant future is in terms of centuries.
-     */
+    // 就是两个特殊的值.
     public static let distantFuture = Date(timeIntervalSinceReferenceDate: 63113904000.0)
-    
-    /**
-     Creates and returns a Date value representing a date in the distant past.
-     
-     The distant past is in terms of centuries.
-     */
     public static let distantPast = Date(timeIntervalSinceReferenceDate: -63114076800.0)
-
+    
     public func hash(into hasher: inout Hasher) {
         hasher.combine(_time)
     }
@@ -190,16 +170,16 @@ public struct Date : ReferenceConvertible, Comparable, Equatable {
     public static func -=(lhs: inout Date, rhs: TimeInterval) {
         lhs = lhs - rhs
     }
-
+    
     public typealias Stride = TimeInterval
-
+    
     /// Returns the `TimeInterval` between this `Date` and another given date.
     ///
     /// - returns: The interval between the receiver and the another parameter. If the receiver is earlier than `other`, the return value is negative.
     public func distance(to other: Date) -> TimeInterval {
         return other.timeIntervalSince(self)
     }
-
+    
     /// Creates a new date value by adding a `TimeInterval` to this `Date`.
     ///
     /// - warning: This only adjusts an absolute value. If you wish to add calendrical concepts like hours, days, months then you must use a `Calendar`. That will take into account complexities like daylight saving time, months with different numbers of days, and more.
@@ -285,7 +265,7 @@ extension Date : Codable {
         let timestamp = try container.decode(Double.self)
         self.init(timeIntervalSinceReferenceDate: timestamp)
     }
-
+    
     public func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         try container.encode(self.timeIntervalSinceReferenceDate)

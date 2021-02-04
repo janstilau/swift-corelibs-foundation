@@ -511,6 +511,7 @@ open class NSKeyedUnarchiver : NSCoder {
 
                 let _ = _validateClassSupportsSecureCoding(classToConstruct)
 
+                // 在这里, 将类型确定了下来.
                 object = decodableClass.init(coder: self)
                 guard object != nil else {
                     throw _decodingError(.coderReadCorrupt,
