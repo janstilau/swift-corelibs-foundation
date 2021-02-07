@@ -984,7 +984,7 @@ extension FileManager {
         }
 
         override func skipDescendants() {
-            _options.insert(.skipsSubdirectoryDescendants)
+            _options.insertIntoList(.skipsSubdirectoryDescendants)
         }
 
         override var directoryAttributes : [FileAttributeKey : Any]? {

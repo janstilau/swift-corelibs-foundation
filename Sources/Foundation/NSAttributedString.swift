@@ -1,22 +1,13 @@
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2016, 2019 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See https://swift.org/LICENSE.txt for license information
-// See https://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-
 @_implementationOnly import CoreFoundation
 
 extension NSAttributedString {
     public struct Key: RawRepresentable, Equatable, Hashable {
         public let rawValue: String
-
+        
         public init(_ rawValue: String) {
             self.rawValue = rawValue
         }
-
+        
         public init(rawValue: String) {
             self.rawValue = rawValue
         }
@@ -115,7 +106,7 @@ open class NSAttributedString: NSObject, NSCopying, NSMutableCopying, NSSecureCo
     open func copy(with zone: NSZone? = nil) -> Any {
         return self
     }
-
+    
     open override func mutableCopy() -> Any {
         return mutableCopy(with: nil)
     }
@@ -123,12 +114,12 @@ open class NSAttributedString: NSObject, NSCopying, NSMutableCopying, NSSecureCo
     open func mutableCopy(with zone: NSZone? = nil) -> Any {
         return NSMutableAttributedString(attributedString: self)
     }
-
+    
     /// The character contents of the receiver as an NSString object.
     open var string: String {
         return _string._swiftObject
     }
-
+    
     /// Returns the attributes for the character at a given index.
     open func attributes(at location: Int, effectiveRange range: NSRangePointer?) -> [NSAttributedString.Key: Any] {
         let rangeInfo = RangeInfo(
@@ -137,12 +128,12 @@ open class NSAttributedString: NSObject, NSCopying, NSMutableCopying, NSSecureCo
             longestEffectiveRangeSearchRange: nil)
         return _attributes(at: location, rangeInfo: rangeInfo)
     }
-
+    
     /// The length of the receiver’s string object.
     open var length: Int {
         return CFAttributedStringGetLength(_cfObject)
     }
-
+    
     /// Returns the value for an attribute with a given name of the character at a given index, and by reference the range over which the attribute applies.
     open func attribute(_ attrName: NSAttributedString.Key, at location: Int, effectiveRange range: NSRangePointer?) -> Any? {
         let rangeInfo = RangeInfo(
@@ -151,13 +142,13 @@ open class NSAttributedString: NSObject, NSCopying, NSMutableCopying, NSSecureCo
             longestEffectiveRangeSearchRange: nil)
         return _attribute(attrName, atIndex: location, rangeInfo: rangeInfo)
     }
-
+    
     /// Returns an NSAttributedString object consisting of the characters and attributes within a given range in the receiver.
     open func attributedSubstring(from range: NSRange) -> NSAttributedString {
         let attributedSubstring = CFAttributedStringCreateWithSubstring(kCFAllocatorDefault, _cfObject, CFRange(range))
         return unsafeBitCast(attributedSubstring, to: NSAttributedString.self)
     }
-
+    
     /// Returns the attributes for the character at a given index, and by reference the range over which the attributes apply.
     open func attributes(at location: Int, longestEffectiveRange range: NSRangePointer?, in rangeLimit: NSRange) -> [NSAttributedString.Key: Any] {
         let rangeInfo = RangeInfo(
@@ -166,7 +157,7 @@ open class NSAttributedString: NSObject, NSCopying, NSMutableCopying, NSSecureCo
             longestEffectiveRangeSearchRange: rangeLimit)
         return _attributes(at: location, rangeInfo: rangeInfo)
     }
-
+    
     /// Returns the value for the attribute with a given name of the character at a given index, and by reference the range over which the attribute applies.
     open func attribute(_ attrName: NSAttributedString.Key, at location: Int, longestEffectiveRange range: NSRangePointer?, in rangeLimit: NSRange) -> Any? {
         let rangeInfo = RangeInfo(
@@ -175,7 +166,7 @@ open class NSAttributedString: NSObject, NSCopying, NSMutableCopying, NSSecureCo
             longestEffectiveRangeSearchRange: rangeLimit)
         return _attribute(attrName, atIndex: location, rangeInfo: rangeInfo)
     }
-
+    
     open override func isEqual(_ object: Any?) -> Bool {
         guard let other = object as? NSAttributedString else { return false }
         return isEqual(to: other)
@@ -193,7 +184,7 @@ open class NSAttributedString: NSObject, NSCopying, NSMutableCopying, NSSecureCo
         
         return equalFunction(_cfObject, other._cfObject) == true
     }
-
+    
     /// Returns an NSAttributedString object initialized with the characters of a given string and no attribute information.
     public init(string: String) {
         _string = string._nsObject
@@ -202,16 +193,16 @@ open class NSAttributedString: NSObject, NSCopying, NSMutableCopying, NSSecureCo
         super.init()
         addAttributesToAttributeArray(attrs: nil)
     }
-
+    
     /// Returns an NSAttributedString object initialized with a given string and attributes.
     public init(string: String, attributes attrs: [NSAttributedString.Key: Any]? = nil) {
         _string = string._nsObject
         _attributeArray = CFRunArrayCreate(kCFAllocatorDefault)
-
+        
         super.init()
         addAttributesToAttributeArray(attrs: attrs)
     }
-
+    
     /// Returns an NSAttributedString object initialized with the characters and attributes of another given attributed string.
     public init(attributedString: NSAttributedString) {
         // create an empty mutable attr string then immediately replace all of its contents
@@ -222,7 +213,7 @@ open class NSAttributedString: NSObject, NSCopying, NSMutableCopying, NSSecureCo
         _string = mutableAttributedString._string
         _attributeArray = mutableAttributedString._attributeArray
     }
-
+    
     /// Executes the block for each attribute in the range.
     open func enumerateAttributes(in enumerationRange: NSRange, options opts: NSAttributedString.EnumerationOptions = [], using block: ([NSAttributedString.Key: Any], NSRange, UnsafeMutablePointer<ObjCBool>) -> Swift.Void) {
         _enumerate(in: enumerationRange, reversed: opts.contains(.reverse)) { currentIndex, rangeLimit, stop in
@@ -241,7 +232,7 @@ open class NSAttributedString: NSObject, NSCopying, NSMutableCopying, NSSecureCo
             return attributesEffectiveRange
         }
     }
-
+    
     /// Executes the block for the specified attribute run in the specified range.
     open func enumerateAttribute(_ attrName: NSAttributedString.Key, in enumerationRange: NSRange, options opts: NSAttributedString.EnumerationOptions = [], using block: (Any?, NSRange, UnsafeMutablePointer<ObjCBool>) -> Swift.Void) {
         _enumerate(in: enumerationRange, reversed: opts.contains(.reverse)) { currentIndex, rangeLimit, stop in
@@ -265,7 +256,7 @@ open class NSAttributedString: NSObject, NSCopying, NSMutableCopying, NSSecureCo
         let string = self.string
         var description = ""
         var lastUpperBound = string.startIndex
-
+        
         enumerateAttributes(in: NSRange(location: 0, length: self.length), options: []) { dict, range, stop in
             var attrs = "{\n"
             let keys = dict.keys.map({ $0.rawValue }).sorted()
@@ -288,7 +279,7 @@ open class NSAttributedString: NSObject, NSCopying, NSMutableCopying, NSSecureCo
         
         return description
     }
-
+    
 }
 
 private extension NSAttributedString {
@@ -420,7 +411,7 @@ extension NSAttributedString {
 }
 
 extension NSAttributedString {
-
+    
     public struct EnumerationOptions: OptionSet {
         public let rawValue: UInt
         public init(rawValue: UInt) {
@@ -429,7 +420,7 @@ extension NSAttributedString {
         public static let reverse = EnumerationOptions(rawValue: 1 << 1)
         public static let longestEffectiveRangeNotRequired = EnumerationOptions(rawValue: 1 << 20)
     }
-
+    
 }
 
 
@@ -450,11 +441,11 @@ open class NSMutableAttributedString : NSAttributedString {
     open var mutableString: NSMutableString {
         return _string as! NSMutableString
     }
-
+    
     open func addAttribute(_ name: NSAttributedString.Key, value: Any, range: NSRange) {
         CFAttributedStringSetAttribute(_cfMutableObject, CFRange(range), name.rawValue._cfObject, __SwiftValue.store(value))
     }
-
+    
     open func addAttributes(_ attrs: [NSAttributedString.Key: Any], range: NSRange) {
         CFAttributedStringSetAttributes(_cfMutableObject, CFRange(range), attributesCFDictionary(from: attrs), false)
     }
@@ -573,7 +564,7 @@ internal func _NSReadIntFromMutableAttributedStringCoding(_ data: NSData, _ star
         guard !newValue.overflow else { return nil }
         
         value = newValue.partialValue
-
+        
         if isLast {
             return (value: value, newOffset: offset)
         }

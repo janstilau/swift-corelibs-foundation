@@ -1,12 +1,3 @@
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-
 import Dispatch
 
 internal let _NSOperationIsFinished = "isFinished"
@@ -29,7 +20,7 @@ internal let _NSOperationQueueOperationCountKeyPath = "operationCount"
 internal let _NSOperationQueueSuspendedKeyPath = "suspended"
 
 extension QualityOfService {
-#if canImport(Darwin)
+    #if canImport(Darwin)
     internal init(_ qos: qos_class_t) {
         switch qos {
         case QOS_CLASS_DEFAULT: self = .default
@@ -40,7 +31,7 @@ extension QualityOfService {
         default: fatalError("Unsupported qos")
         }
     }
-#endif
+    #endif
     internal var qosClass: DispatchQoS {
         switch self {
         case .userInteractive: return .userInteractive
@@ -803,7 +794,7 @@ open class OperationQueue : NSObject, ProgressReporting {
         __atomicLoad.lock()
         defer { __atomicLoad.unlock() }
         if __numExecOps > 0 {
-           __numExecOps -= 1
+            __numExecOps -= 1
         }
     }
     
@@ -1119,11 +1110,11 @@ open class OperationQueue : NSObject, ProgressReporting {
         __maxNumOps = 1
         __actualMaxNumOps = 1
         __name = "NSOperationQueue Main Queue"
-#if canImport(Darwin)
+        #if canImport(Darwin)
         __propertyQoS = QualityOfService(qos_class_main())
-#else
+        #else
         __propertyQoS = QualityOfService.userInteractive
-#endif
+        #endif
         
     }
     

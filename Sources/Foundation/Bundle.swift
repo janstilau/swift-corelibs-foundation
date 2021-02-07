@@ -1,17 +1,3 @@
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-
-@_implementationOnly import CoreFoundation
-
-@_silgen_name("swift_getTypeContextDescriptor")
-private func _getTypeContextDescriptor(of cls: AnyClass) -> UnsafeRawPointer
-
 open class Bundle: NSObject {
     private var _bundleStorage: AnyObject!
     private var _bundle: CFBundle! {
@@ -34,15 +20,15 @@ open class Bundle: NSObject {
         return _CFBundleSupportsFreestandingBundles()
         #endif
     }
-
+    
+    // 内部的懒加载, 封装到类的内部.
     private static var _mainBundle : Bundle = {
         return Bundle(cfBundle: CFBundleGetMainBundle())
     }()
     
+    // 外界使用的, 是更好的方式.
     open class var main: Bundle {
-        get {
-            return _mainBundle
-        }
+        return _mainBundle
     }
     
     private class var allBundlesRegardlessOfType: [Bundle] {
@@ -50,24 +36,24 @@ open class Bundle: NSObject {
         guard let bundles = CFBundleGetAllBundles()?._swiftObject as? [CFBundle] else { return [] }
         return bundles.map(Bundle.init(cfBundle:))
     }
-
+    
     private var isFramework: Bool {
         #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
         return bundleURL.pathExtension == "framework"
         #else
         
-            #if os(Windows)
-            if let name = _CFBundleCopyExecutablePath(_bundle)?._nsObject {
-                return name.pathExtension.lowercased == "dll"
-            }
-            #else
+        #if os(Windows)
+        if let name = _CFBundleCopyExecutablePath(_bundle)?._nsObject {
+            return name.pathExtension.lowercased == "dll"
+        }
+        #else
         
-            // We're assuming this is an OS like Linux or BSD that uses FHS-style library names (lib….so or lib….so.2.3.4)
-            if let name = _CFBundleCopyExecutablePath(_bundle)?._nsObject {
-                return name.hasPrefix("lib") && (name.pathExtension == "so" || name.range(of: ".so.").location != NSNotFound)
-            }
+        // We're assuming this is an OS like Linux or BSD that uses FHS-style library names (lib….so or lib….so.2.3.4)
+        if let name = _CFBundleCopyExecutablePath(_bundle)?._nsObject {
+            return name.hasPrefix("lib") && (name.pathExtension == "so" || name.range(of: ".so.").location != NSNotFound)
+        }
         
-            #endif
+        #endif
         
         return false
         #endif
@@ -139,7 +125,7 @@ open class Bundle: NSObject {
         _bundleStorage = bundle ?? CFBundleGetMainBundle()
     }
     #endif
-
+    
     public init?(identifier: String) {
         super.init()
         
@@ -161,7 +147,7 @@ open class Bundle: NSObject {
     override open var description: String {
         return "\(String(describing: Bundle.self)) <\(bundleURL.path)> (\(isLoaded  ? "loaded" : "not yet loaded"))"
     }
-
+    
     
     /* Methods for loading and unloading bundles. */
     open func load() -> Bool {
@@ -193,7 +179,7 @@ open class Bundle: NSObject {
             }
         }
     }
-
+    
     
     /* Methods for locating various components of a bundle. */
     open var bundleURL: URL {
@@ -283,7 +269,7 @@ open class Bundle: NSObject {
     
     // -----------------------------------------------------------------------------------
     // MARK: - URL Resource Lookup - Instance
-
+    
     open func url(forResource name: String?, withExtension ext: String?) -> URL? {
         return self.url(forResource: name, withExtension: ext, subdirectory: nil)
     }
@@ -301,7 +287,7 @@ open class Bundle: NSObject {
         if (name == nil || name!.isEmpty) && (ext == nil || ext!.isEmpty) {
             return nil
         }
-
+        
         return CFBundleCopyResourceURLForLocalization(_bundle, name?._cfObject, ext?._cfObject, subpath?._cfObject, localizationName?._cfObject)?._swiftObject
     }
     
@@ -315,7 +301,7 @@ open class Bundle: NSObject {
     
     // -----------------------------------------------------------------------------------
     // MARK: - Path Resource Lookup - Class
-
+    
     open class func path(forResource name: String?, ofType ext: String?, inDirectory bundlePath: String) -> String? {
         return Bundle.url(forResource: name, withExtension: ext, subdirectory: bundlePath, in: URL(fileURLWithPath: bundlePath))?.path
     }
@@ -327,7 +313,7 @@ open class Bundle: NSObject {
     
     // -----------------------------------------------------------------------------------
     // MARK: - Path Resource Lookup - Instance
-
+    
     open func path(forResource name: String?, ofType ext: String?) -> String? {
         return self.url(forResource: name, withExtension: ext, subdirectory: nil)?.path
     }
@@ -403,12 +389,12 @@ open class Bundle: NSObject {
         let nsLocalizations = __SwiftValue.fetch(cfLocalizations) as? [Any]
         return nsLocalizations?.map { $0 as! String } ?? []
     }
-
+    
     open var developmentLocalization: String? {
         let region = CFBundleGetDevelopmentRegion(_bundle)!
         return region._swiftObject
     }
-
+    
     open class func preferredLocalizations(from localizationsArray: [String]) -> [String] {
         let cfLocalizations: CFArray? = CFBundleCopyPreferredLocalizationsFromArray(localizationsArray._cfObject)
         let nsLocalizations = __SwiftValue.fetch(cfLocalizations) as? [Any]
@@ -419,7 +405,7 @@ open class Bundle: NSObject {
         let localizations = CFBundleCopyLocalizationsForPreferences(localizationsArray._cfObject, preferencesArray?._cfObject)!
         return localizations._swiftObject.map { return ($0 as! NSString)._swiftObject }
     }
-
+    
     open var executableArchitectures: [NSNumber]? {
         let architectures = CFBundleCopyExecutableArchitectures(_bundle)!
         return architectures._swiftObject.map() { $0 as! NSNumber }

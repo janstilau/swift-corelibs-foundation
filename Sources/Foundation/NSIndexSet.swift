@@ -10,36 +10,36 @@
 import Dispatch
 
 /* Class for managing set of indexes. The set of valid indexes are 0 .. NSNotFound - 1; trying to use indexes outside this range is an error.  NSIndexSet uses NSNotFound as a return value in cases where the queried index doesn't exist in the set; for instance, when you ask firstIndex and there are no indexes; or when you ask for indexGreaterThanIndex: on the last index, and so on.
-
-The following code snippets can be used to enumerate over the indexes in an NSIndexSet:
-
-    // Forward
-    var currentIndex = set.firstIndex
-    while currentIndex != NSNotFound {
-        ...
-        currentIndex = set.indexGreaterThanIndex(currentIndex)
-    }
-
-    // Backward
-    var currentIndex = set.lastIndex
-    while currentIndex != NSNotFound {
-        ...
-        currentIndex = set.indexLessThanIndex(currentIndex)
-    }
-
-To enumerate without doing a call per index, you can use the method getIndexes:maxCount:inIndexRange:.
-*/
+ 
+ The following code snippets can be used to enumerate over the indexes in an NSIndexSet:
+ 
+ // Forward
+ var currentIndex = set.firstIndex
+ while currentIndex != NSNotFound {
+ ...
+ currentIndex = set.indexGreaterThanIndex(currentIndex)
+ }
+ 
+ // Backward
+ var currentIndex = set.lastIndex
+ while currentIndex != NSNotFound {
+ ...
+ currentIndex = set.indexLessThanIndex(currentIndex)
+ }
+ 
+ To enumerate without doing a call per index, you can use the method getIndexes:maxCount:inIndexRange:.
+ */
 
 internal func __NSIndexSetRangeCount(_ indexSet: NSIndexSet) -> Int {
     return indexSet._ranges.count
 }
 
 internal func __NSIndexSetRangeAtIndex(_ indexSet: NSIndexSet, _ index: Int, _ location : UnsafeMutablePointer<Int>, _ length : UnsafeMutablePointer<Int>) {
-//    if Int(index) >= indexSet._ranges.count {
-//        location.pointee = UInt(bitPattern: NSNotFound)
-//        length.pointee = UInt(0)
-//        return
-//    }
+    //    if Int(index) >= indexSet._ranges.count {
+    //        location.pointee = UInt(bitPattern: NSNotFound)
+    //        length.pointee = UInt(0)
+    //        return
+    //    }
     let range = indexSet._ranges[Int(index)]
     location.pointee = range.location
     length.pointee = range.length
@@ -98,9 +98,9 @@ open class NSIndexSet : NSObject, NSCopying, NSMutableCopying, NSSecureCoding {
         }
         return set
     }
-
+    
     public static var supportsSecureCoding: Bool { return true }
-
+    
     public required init?(coder aDecoder: NSCoder)  {
         let rangesCount = aDecoder.decodeInteger(forKey: "NSRangeCount")
         if rangesCount == 1 {
@@ -168,17 +168,17 @@ open class NSIndexSet : NSObject, NSCopying, NSMutableCopying, NSSecureCoding {
         if _ranges.count != indexSet.rangeView.count {
             return false
         }
-
+        
         // Iterate over indexes to compare each
         for (range, element) in zip(_ranges, indexSet.rangeView) {
             let elementLength = element.upperBound - element.lowerBound
-
+            
             // Return false if the ranges do not match
             if range.location != element.lowerBound || range.length != elementLength {
                 return false
             }
         }
-
+        
         return true
     }
     
@@ -201,7 +201,7 @@ open class NSIndexSet : NSObject, NSCopying, NSMutableCopying, NSSecureCoding {
     }
     
     /* The following six methods will return NSNotFound if there is no index in the set satisfying the query. 
-    */
+     */
     open var firstIndex: Int {
         return _ranges.first?.location ?? NSNotFound
     }
@@ -319,7 +319,7 @@ open class NSIndexSet : NSObject, NSCopying, NSMutableCopying, NSSecureCoding {
     }
     
     /* Fills up to bufferSize indexes in the specified range into the buffer and returns the number of indexes actually placed in the buffer; also modifies the optional range passed in by pointer to be "positioned" after the last index filled into the buffer.Example: if the index set contains the indexes 0, 2, 4, ..., 98, 100, for a buffer of size 10 and the range (20, 80) the buffer would contain 20, 22, ..., 38 and the range would be modified to (40, 60).
-    */
+     */
     open func getIndexes(_ indexBuffer: UnsafeMutablePointer<Int>, maxCount bufferSize: Int, inIndexRange range: NSRangePointer?) -> Int {
         let minIndex : Int
         let maxIndex : Int
@@ -453,7 +453,7 @@ open class NSIndexSet : NSObject, NSCopying, NSMutableCopying, NSSecureCoding {
         guard let startRangeIndex = self._indexOfRangeAfterOrContainingIndex(range.location), let endRangeIndex = _indexOfRangeBeforeOrContainingIndex(NSMaxRange(range) - 1) else {
             return nil
         }
-
+        
         var result : Int? = nil
         let reverse = opts.contains(.reverse)
         let passRanges = paramType == NSRange.self
@@ -515,7 +515,7 @@ open class NSIndexSet : NSObject, NSCopying, NSMutableCopying, NSSecureCoding {
         
         return result
     }
-
+    
     open func enumerate(_ block: (Int, UnsafeMutablePointer<ObjCBool>) -> Void) {
         enumerate(options: [], using: block)
     }
@@ -525,7 +525,7 @@ open class NSIndexSet : NSObject, NSCopying, NSMutableCopying, NSSecureCoding {
     open func enumerate(in range: NSRange, options opts: NSEnumerationOptions = [], using block: (Int, UnsafeMutablePointer<ObjCBool>) -> Void) {
         let _ = _enumerateWithOptions(opts, range: range, paramType: Int.self, returnType: Void.self, block: block)
     }
-
+    
     open func index(passingTest predicate: (Int, UnsafeMutablePointer<ObjCBool>) -> Bool) -> Int {
         return index(options: [], passingTest: predicate)
     }
@@ -551,12 +551,12 @@ open class NSIndexSet : NSObject, NSCopying, NSMutableCopying, NSSecureCoding {
         }
         return result
     }
-
+    
     /*
      The following three convenience methods allow you to enumerate the indexes in the receiver by ranges of contiguous indexes. The performance of these methods is not guaranteed to be any better than if they were implemented with enumerateIndexesInRange:options:usingBlock:. However, depending on the receiver's implementation, they may perform better than that.
-
+     
      If the specified range for enumeration intersects a range of contiguous indexes in the receiver, then the block will be invoked with the intersection of those two ranges.
-    */
+     */
     open func enumerateRanges(_ block: (NSRange, UnsafeMutablePointer<ObjCBool>) -> Void) {
         enumerateRanges(options: [], using: block)
     }
@@ -604,7 +604,7 @@ open class NSMutableIndexSet : NSIndexSet {
     open func add(_ indexSet: IndexSet) {
         indexSet.rangeView.forEach { add(in: NSRange(location: $0.lowerBound, length: $0.upperBound - $0.lowerBound)) }
     }
-
+    
     open override func copy(with zone: NSZone? = nil) -> Any {
         if type(of: self) === NSMutableIndexSet.self {
             let indexSet = NSMutableIndexSet()
@@ -843,7 +843,7 @@ open class NSMutableIndexSet : NSIndexSet {
     }
     
     /* For a positive delta, shifts the indexes in [index, INT_MAX] to the right, thereby inserting an "empty space" [index, delta], for a negative delta, shifts the indexes in [index, INT_MAX] to the left, thereby deleting the indexes in the range [index - delta, delta].
-    */
+     */
     open func shiftIndexesStarting(at index: Int, by delta: Int) {
         if delta > 0 {
             _increment(by: delta, startingAt: index)

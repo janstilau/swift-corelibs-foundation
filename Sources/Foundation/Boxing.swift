@@ -75,7 +75,7 @@ internal protocol _SwiftNativeFoundationType: AnyObject {
     
     func hash(into hasher: inout Hasher)
     var hashValue: Int { get }
-
+    
     var description: String { get }
     var debugDescription: String { get }
     
@@ -118,7 +118,7 @@ extension _SwiftNativeFoundationType {
     func hash(into hasher: inout Hasher) {
         _mapUnmanaged { hasher.combine($0) }
     }
-
+    
     var hashValue: Int {
         return _mapUnmanaged { return $0.hashValue }
     }
@@ -194,7 +194,7 @@ extension _MutablePairBoxing {
         case .Immutable(let i):
             // We need to become mutable; by creating a new instance we also become unique
             let copy = Unmanaged.passRetained(i._withUnsafeGuaranteedRef {
-                return _unsafeReferenceCast($0.mutableCopy(), to: WrappedSwiftNSType.MutableType.self) }
+                                                return _unsafeReferenceCast($0.mutableCopy(), to: WrappedSwiftNSType.MutableType.self) }
             )
             
             // Be sure to set the var before calling out; otherwise references to the struct in the closure may be looking at the old value
@@ -208,7 +208,7 @@ extension _MutablePairBoxing {
             if !unique {
                 let copy = Unmanaged.passRetained(m._withUnsafeGuaranteedRef {
                     return _unsafeReferenceCast($0.mutableCopy(), to: WrappedSwiftNSType.MutableType.self)
-                    })
+                })
                 _wrapped = WrappedSwiftNSType(unmanagedMutableObject: copy)
                 return try copy._withUnsafeGuaranteedRef {
                     _onFastPath()

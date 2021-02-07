@@ -1,15 +1,3 @@
-//===----------------------------------------------------------------------===//
-//
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-//===----------------------------------------------------------------------===//
-
 
 internal func __NSTimeZoneIsAutoupdating(_ timezone: NSTimeZone) -> Bool {
     return false
@@ -42,7 +30,7 @@ public struct TimeZone : Hashable, Equatable, ReferenceConvertible {
     public static var current : TimeZone {
         return TimeZone(adoptingReference: __NSTimeZoneCurrent(), autoupdating: false)
     }
-
+    
     /// The time zone currently used by the system, automatically updating to the user's current preference.
     ///
     /// If this time zone is mutated, then it no longer tracks the system time zone.
@@ -85,7 +73,7 @@ public struct TimeZone : Hashable, Equatable, ReferenceConvertible {
         // It is not a failable initializer because we want to have parity with Darwin's NSTimeZone, which is
         // Objective-C and has a wrong _Nonnull annotation.
         if (seconds < -18 * 3600 || 18 * 3600 < seconds) { return nil }
-
+        
         _wrapped = NSTimeZone(forSecondsFromGMT: seconds)
         _autoupdating = false
     }
@@ -217,7 +205,7 @@ public struct TimeZone : Hashable, Equatable, ReferenceConvertible {
             hasher.combine(_wrapped)
         }
     }
-
+    
     public static func ==(lhs: TimeZone, rhs: TimeZone) -> Bool {
         if lhs._autoupdating || rhs._autoupdating {
             return lhs._autoupdating == rhs._autoupdating
@@ -235,7 +223,7 @@ extension TimeZone : CustomStringConvertible, CustomDebugStringConvertible, Cust
             return "fixed"
         }
     }
-
+    
     public var customMirror : Mirror {
         var c: [(label: String?, value: Any)] = []
         c.append((label: "identifier", value: identifier))
@@ -245,11 +233,11 @@ extension TimeZone : CustomStringConvertible, CustomDebugStringConvertible, Cust
         c.append((label: "isDaylightSavingTime", value: isDaylightSavingTime()))
         return Mirror(self, children: c, displayStyle: .struct)
     }
-
+    
     public var description: String {
         return "\(identifier) (\(_kindDescription))"
     }
-
+    
     public var debugDescription : String {
         return "\(identifier) (\(_kindDescription))"
     }
@@ -288,19 +276,19 @@ extension TimeZone : Codable {
     private enum CodingKeys : Int, CodingKey {
         case identifier
     }
-
+    
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let identifier = try container.decode(String.self, forKey: .identifier)
-
+        
         guard let timeZone = TimeZone(identifier: identifier) else {
             throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: decoder.codingPath,
                                                                     debugDescription: "Invalid TimeZone identifier."))
         }
-
+        
         self = timeZone
     }
-
+    
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(self.identifier, forKey: .identifier)

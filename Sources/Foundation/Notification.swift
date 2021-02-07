@@ -1,16 +1,3 @@
-//===----------------------------------------------------------------------===//
-//
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-//===----------------------------------------------------------------------===//
-
-
 /**
  `Notification` encapsulates information broadcast to observers via a `NotificationCenter`.
  */
@@ -36,12 +23,12 @@ public struct Notification : ReferenceConvertible, Equatable, Hashable {
         self.object = object
         self.userInfo = userInfo
     }
-
+    
     public func hash(into hasher: inout Hasher) {
         hasher.combine(name)
         // FIXME: We should feed the object to the hasher, but using
         // the object identity would make the hash encoding unstable.
-
+        
         // FIXME: Darwin also hashes the keys in the userInfo dictionary.
     }
     
@@ -83,15 +70,15 @@ public struct Notification : ReferenceConvertible, Equatable, Hashable {
 extension Notification : CustomReflectable {
     public var customMirror: Mirror {
         var children: [(label: String?, value: Any)] = [(label: "name", self.name.rawValue)]
-
+        
         if let object = self.object {
             children.append((label: "object", object))
         }
-
+        
         if let info = self.userInfo {
             children.append((label: "userInfo", info))
         }
-
+        
         return Mirror(self, children: children, displayStyle: .class)
     }
 }
@@ -102,7 +89,6 @@ extension Notification : _ObjectiveCBridgeable {
         return NSNotification.self
     }
     
-    @_semantics("convertToObjectiveC")
     public func _bridgeToObjectiveC() -> NSNotification {
         return NSNotification(name: name, object: object, userInfo: userInfo)
     }

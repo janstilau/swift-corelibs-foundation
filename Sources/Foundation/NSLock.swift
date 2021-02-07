@@ -1,13 +1,5 @@
 @_implementationOnly import CoreFoundation
 
-#if canImport(Glibc)
-import Glibc
-#endif
-
-#if os(Windows)
-import WinSDK
-#endif
-
 public protocol NSLocking {
     func lock()
     func unlock()

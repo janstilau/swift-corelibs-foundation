@@ -1,20 +1,10 @@
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-
 open class NSValue : NSObject, NSCopying, NSSecureCoding, NSCoding {
-
+    
     private static var SideTable = [ObjectIdentifier : NSValue]()
     private static var SideTableLock = NSLock()
-
+    
     internal override init() {
         super.init()
-        // on Darwin [NSValue new] returns nil
     }
     
     // because we cannot support the class cluster pattern owing to a lack of
@@ -97,7 +87,8 @@ open class NSValue : NSObject, NSCopying, NSSecureCoding, NSCoding {
         return NSSpecialValue._typeFromObjCType(type) != nil
     }
     
-    public convenience required init(bytes value: UnsafeRawPointer, objCType type: UnsafePointer<Int8>) {
+    public convenience required init(bytes value: UnsafeRawPointer,
+                                     objCType type: UnsafePointer<Int8>) {
         if Swift.type(of: self) == NSValue.self {
             self.init()
             if NSValue._isSpecialObjCType(type) {
@@ -132,7 +123,7 @@ open class NSValue : NSObject, NSCopying, NSSecureCoding, NSCoding {
             NSRequiresConcreteImplementation()
         }
     }
-        
+    
     open func encode(with aCoder: NSCoder) {
         if type(of: self) == NSValue.self {
             _concreteValue.encode(with: aCoder)
