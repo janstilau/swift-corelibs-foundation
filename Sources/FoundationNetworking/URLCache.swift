@@ -251,15 +251,14 @@ open class URLCache : NSObject {
         }
     }
     
-    private func enumerateDiskEntries(includingPropertiesForKeys keys: [URLResourceKey] = [], using block: (DiskEntry, inout Bool) -> Void) {
+    private func enumerateDiskEntries(includingPropertiesForKeys keys: [URLResourceKey] = [],
+                                      using block: (DiskEntry, inout Bool) -> Void) {
         guard let directory = cacheDirectory else { return }
         for url in (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: keys)) ?? [] {
             if let entry = DiskEntry(url) {
                 var stop = false
                 block(entry, &stop)
-                if stop {
-                    return
-                }
+                if stop { return }
             }
         }
     }
@@ -334,16 +333,9 @@ open class URLCache : NSObject {
         return contents.cachedURLResponse
     }
     
-    
-    
-    /*! 
-     @method memoryCapacity
-     @abstract In-memory capacity of the receiver.
-     @discussion At the time this call is made, the in-memory cache will truncate its contents to the size given, if necessary.
-     @result The in-memory capacity, measured in bytes, for the receiver.
-     */
     open var memoryCapacity: Int {
         didSet {
+            // 在 DidSet 里面, 去调用属性的修改后的逻辑, 这样代码更加简单.
             inMemoryCacheLock.performLocked {
                 evictFromMemoryCacheAssumingLockHeld(maximumSize: memoryCapacity)
             }
@@ -376,14 +368,6 @@ open class URLCache : NSObject {
         }
     }
     
-    /*! 
-     @method currentDiskUsage
-     @abstract Returns the current amount of space consumed by the
-     on-disk cache of the receiver.
-     @discussion This size, measured in bytes, indicates the current
-     usage of the on-disk cache.
-     @result the current usage of the on-disk cache of the receiver.
-     */
     open var currentDiskUsage: Int {
         var total = 0
         enumerateDiskEntries(includingPropertiesForKeys: [.fileSizeKey]) { (entry, stop) in
@@ -475,14 +459,6 @@ extension URLCache {
         }
     }
     
-    /*!
-     @method removeCachedResponseForRequest:
-     @abstract Removes the NSCachedURLResponse from the cache that is
-     stored using the given request.
-     @discussion No action is taken if there is no NSCachedURLResponse
-     stored with the given request.
-     @param request the NSURLRequest to use as a key for the lookup.
-     */
     open func removeCachedResponse(for request: URLRequest) {
         guard let identifier = identifier(for: request) else { return }
         
@@ -498,51 +474,44 @@ extension URLCache {
         }
     }
     
-    /*!
-     @method removeAllCachedResponses
-     @abstract Clears the given cache, removing all NSCachedURLResponse
-     objects that it stores.
-     */
+    // 清空, 内存清空, 文件清空
     open func removeAllCachedResponses() {
         inMemoryCacheLock.performLocked {
             inMemoryCacheContents = [:]
             inMemoryCacheOrder = []
         }
-        
         evictFromDiskCache(maximumSize: 0)
     }
     
-    /*!
-     @method removeCachedResponsesSince:
-     @abstract Clears the given cache of any cached responses since the provided date.
-     */
     open func removeCachedResponses(since date: Date) {
-        inMemoryCacheLock.performLocked { // Memory cache:
+        // 通过 {} 的包裹, 两个代码段, 分别为内存修改, 文件修改, 这样代码清晰一点.
+        inMemoryCacheLock.performLocked {
             var identifiersToRemove: Set<String> = []
             for entry in inMemoryCacheContents {
                 if entry.value.date > date {
                     identifiersToRemove.insert(entry.key)
                 }
             }
-            
             for toRemove in identifiersToRemove {
                 inMemoryCacheContents.removeValue(forKey: toRemove)
             }
             inMemoryCacheOrder.removeAll { identifiersToRemove.contains($0) }
         }
-        
-        do { // Disk cache:
+        // Do 可以单独使用, 这样可以显示的定义一个代码块
+        do {
             let entriesToRemove = diskEntries().filter {
                 $0.date > date
             }
-            
             for entry in entriesToRemove {
                 try? FileManager.default.removeItem(at: entry.url)
             }
         }
     }
     
-    func evictFromMemoryCacheAssumingLockHeld(maximumSize: Int) {
+    // evictFromMemoryCacheAssumingLockHeld 这个代码有点问题.
+    // 加锁解锁是调用者的义务, 根本不应该使用函数名进行提醒.
+    func evictFromMemoryCache(maximumSize: Int) {
+        // 多多使用函数式编程, 这是 Swift 面向协议的优势所在.
         var totalSize = inMemoryCacheContents.values.reduce(0) { $0 + $1.cost }
         
         var countEvicted = 0
@@ -560,14 +529,13 @@ extension URLCache {
     }
     
     func evictFromDiskCache(maximumSize: Int) {
+        // 以往, 比较费时的操作, 在 Swift 里面, 通过三个 sequence 上的方法, 很简单的就完成了
         let entries = diskEntries(includingPropertiesForKeys: [.fileSizeKey]).sorted {
             $0.date < $1.date
         }
-        
         let sizes = entries.map { (entry) in
             (try? entry.url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         }
-        
         var totalSize = sizes.reduce(0, +)
         
         for (index, entry) in entries.enumerated() {
