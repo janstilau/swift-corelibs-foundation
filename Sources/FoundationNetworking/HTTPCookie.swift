@@ -1,21 +1,9 @@
-#if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
-import SwiftFoundation
-#else
-import Foundation
-#endif
-
-#if os(Windows)
-import WinSDK
-#endif
-
 // RawRepresentable 表明了, 他就是字符串的封装而已.
 public struct HTTPCookiePropertyKey : RawRepresentable, Equatable, Hashable {
     public private(set) var rawValue: String
-    
     public init(_ rawValue: String) {
         self.rawValue = rawValue
     }
-    
     public init(rawValue: String) {
         self.rawValue = rawValue
     }
@@ -37,73 +25,43 @@ public struct HTTPCookiePropertyKey : RawRepresentable, Equatable, Hashable {
  NSString * const NSHTTPCookieValue = @"Value";
  NSString * const NSHTTPCookieVersion = @"Version";
  static NSString * const HTTPCookieHTTPOnly = @"HTTPOnly";
- 之前的这种方式, 数据和类没有很好的包装在了一起. 这个在 Int 的 max, min 那里其实就体现了出来.
- 现在, 通过一个特殊的类型, 能够让这个类型的特殊值, 存放到合适的位置了.
  */
+// 更好的组织方式, 所有的类相关的值, 通过类型下的 static 表明了, 这是类相关的数据. 比手动增加前缀要好太多了.
+// 更好的组织方式, 特殊量放到一个 extension 里面. Extension 代码段, 没有其他的无关的逻辑.
 extension HTTPCookiePropertyKey {
-    /// Key for cookie name
     public static let name = HTTPCookiePropertyKey(rawValue: "Name")
-    
-    /// Key for cookie value
     public static let value = HTTPCookiePropertyKey(rawValue: "Value")
-    
-    /// Key for cookie origin URL
     public static let originURL = HTTPCookiePropertyKey(rawValue: "OriginURL")
-    
-    /// Key for cookie version
     public static let version = HTTPCookiePropertyKey(rawValue: "Version")
-    
-    /// Key for cookie domain
     public static let domain = HTTPCookiePropertyKey(rawValue: "Domain")
-    
-    /// Key for cookie path
     public static let path = HTTPCookiePropertyKey(rawValue: "Path")
-    
-    /// Key for cookie secure flag
     public static let secure = HTTPCookiePropertyKey(rawValue: "Secure")
-    
-    /// Key for cookie expiration date
     public static let expires = HTTPCookiePropertyKey(rawValue: "Expires")
-    
-    /// Key for cookie comment text
     public static let comment = HTTPCookiePropertyKey(rawValue: "Comment")
-    
-    /// Key for cookie comment URL
     public static let commentURL = HTTPCookiePropertyKey(rawValue: "CommentURL")
-    
-    /// Key for cookie discard (session-only) flag
     public static let discard = HTTPCookiePropertyKey(rawValue: "Discard")
-    
-    /// Key for cookie maximum age (an alternate way of specifying the expiration)
     public static let maximumAge = HTTPCookiePropertyKey(rawValue: "Max-Age")
-    
-    /// Key for cookie ports
     public static let port = HTTPCookiePropertyKey(rawValue: "Port")
-    
-    // For Cocoa compatibility
     internal static let created = HTTPCookiePropertyKey(rawValue: "Created")
-    
     static let httpOnly = HTTPCookiePropertyKey(rawValue: "HttpOnly")
 }
 
 internal extension HTTPCookiePropertyKey {
-    // 这并不是一个计算属性, 因为后面有着 () 表示调用, static 默认就是 lazy 的. 所以, 里面是值初始化的表达式.
+    // 如果是成员变量, 应该增加 lazy
+    // 但是 static 的值, 默认就是 lazy 的.
     static private let _setCookieAttributes: [String: HTTPCookiePropertyKey] = {
-        // Only some attributes are valid in the Set-Cookie header.
         let validProperties: [HTTPCookiePropertyKey] = [
             .expires, .maximumAge, .domain, .path, .secure, .comment,
             .commentURL, .discard, .port, .version, .httpOnly
         ]
         let canonicalNames = validProperties.map { $0.rawValue.lowercased() }
-        // zip : Creates a sequence of pairs built out of two underlying sequences.
+        // RawRepresentable 提供了一种通用的进行对象和数据之间的转化工作.
         return Dictionary(uniqueKeysWithValues: zip(canonicalNames, validProperties))
     }()
     
-    // 这是一个 struct, 所以可以直接 self = value 这种方式进行初始化.
-    // 这种方式, 应该多多学习.
-    // 如果用 OC 去写, 其实也是先定义数据, 然后去数据里面寻找.
-    // 这种方式, 首先数据是存放到了属性里面, 让这个数据的作用域变大了.
-    // 还使用了 switch 的特性, 更加的 swift.
+  
+    // 如果我来写, 可能就是 contains 判断了.
+    // 这里使用 switch, 更加的 Swift 风格
     init?(attributeName: String) {
         let canonical = attributeName.lowercased()
         switch HTTPCookiePropertyKey._setCookieAttributes[canonical] {
@@ -113,12 +71,6 @@ internal extension HTTPCookiePropertyKey {
     }
 }
 
-/// `HTTPCookie` represents an http cookie.
-///
-/// An `HTTPCookie` instance represents a single http cookie. It is
-/// an immutable object initialized from a dictionary that contains
-/// the various cookie attributes. It has accessors to get the various
-/// attributes of a cookie.
 open class HTTPCookie : NSObject {
     
     // 在 OC 的版本里面, 所有的东西, 都存到了一个 NSDictionary 上, 不同的 value 的 get, 就是使用特殊的 key 去查询.
@@ -138,7 +90,6 @@ open class HTTPCookie : NSObject {
     var _properties: [HTTPCookiePropertyKey : Any]
     
     // See: https://tools.ietf.org/html/rfc2616#section-3.3.1
-    
     // Sun, 06 Nov 1994 08:49:37 GMT  ; RFC 822, updated by RFC 1123
     static let _formatter1: DateFormatter = {
         let formatter = DateFormatter()
@@ -147,7 +98,6 @@ open class HTTPCookie : NSObject {
         formatter.timeZone = TimeZone(abbreviation: "GMT")
         return formatter
     }()
-    
     // Sun Nov  6 08:49:37 1994       ; ANSI C's asctime() format
     static let _formatter2: DateFormatter = {
         let formatter = DateFormatter()
@@ -156,7 +106,6 @@ open class HTTPCookie : NSObject {
         formatter.timeZone = TimeZone(abbreviation: "GMT")
         return formatter
     }()
-    
     // Sun, 06-Nov-1994 08:49:37 GMT  ; Tomcat servers sometimes return cookies in this format
     static let _formatter3: DateFormatter = {
         let formatter = DateFormatter()
@@ -165,135 +114,11 @@ open class HTTPCookie : NSObject {
         formatter.timeZone = TimeZone(abbreviation: "GMT")
         return formatter
     }()
-    
     static let _allFormatters: [DateFormatter]
         = [_formatter1, _formatter2, _formatter3]
     
-    /// Initialize a HTTPCookie object with a dictionary of parameters
-    ///
-    /// - Parameter properties: The dictionary of properties to be used to
-    /// initialize this cookie.
-    ///
-    /// Supported dictionary keys and value types for the
-    /// given dictionary are as follows.
-    ///
-    /// All properties can handle an NSString value, but some can also
-    /// handle other types.
-    ///
-    /// <table border=1 cellspacing=2 cellpadding=4>
-    /// <tr>
-    ///     <th>Property key constant</th>
-    ///     <th>Type of value</th>
-    ///     <th>Required</th>
-    ///     <th>Description</th>
-    /// </tr>
-    /// <tr>
-    ///     <td>HTTPCookiePropertyKey.comment</td>
-    ///     <td>NSString</td>
-    ///     <td>NO</td>
-    ///     <td>Comment for the cookie. Only valid for version 1 cookies and
-    ///     later. Default is nil.</td>
-    /// </tr>
-    /// <tr>
-    ///     <td>HTTPCookiePropertyKey.commentURL</td>
-    ///     <td>NSURL or NSString</td>
-    ///     <td>NO</td>
-    ///     <td>Comment URL for the cookie. Only valid for version 1 cookies
-    ///     and later. Default is nil.</td>
-    /// </tr>
-    /// <tr>
-    ///     <td>HTTPCookiePropertyKey.domain</td>
-    ///     <td>NSString</td>
-    ///     <td>Special, a value for either .originURL or
-    ///     HTTPCookiePropertyKey.domain must be specified.</td>
-    ///     <td>Domain for the cookie. Inferred from the value for
-    ///     HTTPCookiePropertyKey.originURL if not provided.</td>
-    /// </tr>
-    /// <tr>
-    ///     <td>HTTPCookiePropertyKey.discard</td>
-    ///     <td>NSString</td>
-    ///     <td>NO</td>
-    ///     <td>A string stating whether the cookie should be discarded at
-    ///     the end of the session. String value must be either "TRUE" or
-    ///     "FALSE". Default is "FALSE", unless this is cookie is version
-    ///     1 or greater and a value for HTTPCookiePropertyKey.maximumAge is not
-    ///     specified, in which case it is assumed "TRUE".</td>
-    /// </tr>
-    /// <tr>
-    ///     <td>HTTPCookiePropertyKey.expires</td>
-    ///     <td>NSDate or NSString</td>
-    ///     <td>NO</td>
-    ///     <td>Expiration date for the cookie. Used only for version 0
-    ///     cookies. Ignored for version 1 or greater.</td>
-    /// </tr>
-    /// <tr>
-    ///     <td>HTTPCookiePropertyKey.maximumAge</td>
-    ///     <td>NSString</td>
-    ///     <td>NO</td>
-    ///     <td>A string containing an integer value stating how long in
-    ///     seconds the cookie should be kept, at most. Only valid for
-    ///     version 1 cookies and later. Default is "0".</td>
-    /// </tr>
-    /// <tr>
-    ///     <td>HTTPCookiePropertyKey.name</td>
-    ///     <td>NSString</td>
-    ///     <td>YES</td>
-    ///     <td>Name of the cookie</td>
-    /// </tr>
-    /// <tr>
-    ///     <td>HTTPCookiePropertyKey.originURL</td>
-    ///     <td>NSURL or NSString</td>
-    ///     <td>Special, a value for either HTTPCookiePropertyKey.originURL or
-    ///     HTTPCookiePropertyKey.domain must be specified.</td>
-    ///     <td>URL that set this cookie. Used as default for other fields
-    ///     as noted.</td>
-    /// </tr>
-    /// <tr>
-    ///     <td>HTTPCookiePropertyKey.path</td>
-    ///     <td>NSString</td>
-    ///     <td>YES</td>
-    ///     <td>Path for the cookie</td>
-    /// </tr>
-    /// <tr>
-    ///     <td>HTTPCookiePropertyKey.port</td>
-    ///     <td>NSString</td>
-    ///     <td>NO</td>
-    ///     <td>comma-separated integer values specifying the ports for the
-    ///     cookie. Only valid for version 1 cookies and later. Default is
-    ///     empty string ("").</td>
-    /// </tr>
-    /// <tr>
-    ///     <td>HTTPCookiePropertyKey.secure</td>
-    ///     <td>NSString</td>
-    ///     <td>NO</td>
-    ///     <td>A string stating whether the cookie should be transmitted
-    ///     only over secure channels. String value must be either "TRUE"
-    ///     or "FALSE". Default is "FALSE".</td>
-    /// </tr>
-    /// <tr>
-    ///     <td>HTTPCookiePropertyKey.value</td>
-    ///     <td>NSString</td>
-    ///     <td>YES</td>
-    ///     <td>Value of the cookie</td>
-    /// </tr>
-    /// <tr>
-    ///     <td>HTTPCookiePropertyKey.version</td>
-    ///     <td>NSString</td>
-    ///     <td>NO</td>
-    ///     <td>Specifies the version of the cookie. Must be either "0" or
-    ///     "1". Default is "0".</td>
-    /// </tr>
-    /// </table>
-    ///
-    ///
-    /// - Returns: An initialized `HTTPCookie`, or nil if the set of
-    /// dictionary keys is invalid, for example because a required key is
-    /// missing, or a recognized key maps to an illegal value.
-    
-    // HttpCookie 的初始化方法.
-    // 其实, 就是 key: value 字典不断取值. key 被包装成为特定的类型了.
+    // HttpCookie 的初始化方法. 其实就是根据一个字典, 不断进行自己的各个成员变量的初始化就可以了.
     public init?(properties: [HTTPCookiePropertyKey : Any]) {
-        // 应该, 都是 stringvalue 才对, 应为 http 就是一个字符串协议.
         func stringValue(_ strVal: Any?) -> String? {
             if let subStr = strVal as? Substring {
                 return String(subStr)
@@ -301,7 +126,6 @@ open class HTTPCookie : NSObject {
             return strVal as? String
         }
         
-        // 必须要有 path, name, value 这个三个值. name value 可以理解.
         guard
             let path = stringValue(properties[.path]),
             let name = stringValue(properties[.name]),
@@ -313,34 +137,26 @@ open class HTTPCookie : NSObject {
         let canonicalDomain: String
         if let domain = properties[.domain] as? String {
             canonicalDomain = domain
-        } else if
-            let originURL = properties[.originURL] as? URL,
-            let host = originURL.host
-        {
+        } else if let originURL = properties[.originURL] as? URL,
+                  let host = originURL.host {
             canonicalDomain = host
         } else {
             return nil
         }
-        
-        // 多多使用 guard. 这其实就是自己之前常使用的 if return 操作.
         
         _path = path
         _name = name
         _value = value
         _domain = canonicalDomain.lowercased()
         
-        if let
-            secureString = properties[.secure] as? String, !secureString.isEmpty
-        {
+        if let secureString = properties[.secure] as? String, !secureString.isEmpty {
             _secure = true
         } else {
             _secure = false
         }
         
         let version: Int
-        if let
-            versionString = properties[.version] as? String, versionString == "1"
-        {
+        if let versionString = properties[.version] as? String, versionString == "1" {
             version = 1
         } else {
             version = 0
@@ -348,14 +164,12 @@ open class HTTPCookie : NSObject {
         _version = version
         
         if let portString = properties[.port] as? String {
-            // 下面的模式, 就很 swift 化. 管道的数据的连接. 所有的操作, 都在各自的函数里面, 进行了很好的封装, 使用者仅仅是进行组合就可以了.
             let portList = portString.split(separator: ",")
                 .compactMap { Int(String($0)) }
                 .map { NSNumber(value: $0) }
             if version == 1 {
                 _portList = portList
             } else {
-                // Version 0 only stores a single port number
                 _portList = portList.count > 0 ? [portList[0]] : nil
             }
         } else {
@@ -431,18 +245,12 @@ open class HTTPCookie : NSObject {
         }
     }
     
-    /// Return a dictionary of header fields that can be used to add the
-    /// specified cookies to the request.
-    ///
-    /// - Parameter cookies: The cookies to turn into request headers.
-    /// - Returns: A dictionary where the keys are header field names, and the values
-    /// are the corresponding header field values.
-    // 把之前抽取出来的值, 再次变回字符串的形式, 也就是服务器端 set-cookie 的时候, 传过来的值.
+    // 把 Cookie 的值, 变为一个 String Dict.
     open class func requestHeaderFields(with cookies: [HTTPCookie]) -> [String : String] {
-        var cookieString = cookies.reduce("") { (sum, next) -> String in
+        var cookieString = cookies.reduce("") {
+            (sum, next) -> String in
             return sum + "\(next._name)=\(next._value); "
         }
-        //Remove the final trailing semicolon and whitespace
         if ( cookieString.length > 0 ) {
             cookieString.removeLast()
             cookieString.removeLast()
@@ -454,13 +262,7 @@ open class HTTPCookie : NSObject {
         }
     }
     
-    /// Return an array of cookies parsed from the specified response header fields and URL.
-    ///
-    /// This method will ignore irrelevant header fields so
-    /// you can pass a dictionary containing data other than cookie data.
-    /// - Parameter headerFields: The response header fields to check for cookies.
-    /// - Parameter URL: The URL that the cookies came from - relevant to how the cookies are interpreted.
-    /// - Returns: An array of HTTPCookie objects
+    // Cookie 的解析过程. 传过来一个 Response, 返回对应的 Cookie
     open class func cookies(withResponseHeaderFields headerFields: [String : String], for URL: URL) -> [HTTPCookie] {
         
         guard let cookies: String = headerFields["Set-Cookie"]  else { return [] }
@@ -532,7 +334,6 @@ open class HTTPCookie : NSObject {
         return httpCookies
     }
     
-    //Bake a cookie
     private class func createHttpCookie(url: URL, cookie: String) -> HTTPCookie? {
         var properties: [HTTPCookiePropertyKey : Any] = [:]
         let scanner = Scanner(string: cookie)
@@ -646,155 +447,47 @@ open class HTTPCookie : NSObject {
         var x = in_addr()
         return inet_pton(AF_INET, string, &x) == 1
     }
-    
-    /// Returns a dictionary representation of the receiver.
-    ///
-    /// This method returns a dictionary representation of the
-    /// `HTTPCookie` which can be saved and passed to
-    /// `init(properties:)` later to reconstitute an equivalent cookie.
-    ///
-    /// See the `HTTPCookie` `init(properties:)` method for
-    /// more information on the constraints imposed on the dictionary, and
-    /// for descriptions of the supported keys and values.
-    ///
-    /// - Experiment: This is a draft API currently under consideration for official import into Foundation as a suitable alternative
-    /// - Note: Since this API is under consideration it may be either removed or revised in the near future
     open var properties: [HTTPCookiePropertyKey : Any]? {
         return _properties
     }
-    
-    /// The version of the receiver.
-    ///
-    /// Version 0 maps to "old-style" Netscape cookies.
-    /// Version 1 maps to RFC2965 cookies. There may be future versions.
     open var version: Int {
         return _version
     }
-    
-    /// The name of the receiver.
     open var name: String {
         return _name
     }
-    
-    /// The value of the receiver.
     open var value: String {
         return _value
     }
-    
-    /// Returns The expires date of the receiver.
-    ///
-    /// The expires date is the date when the cookie should be
-    /// deleted. The result will be nil if there is no specific expires
-    /// date. This will be the case only for *session-only* cookies.
-    /*@NSCopying*/ open var expiresDate: Date? {
+    open var expiresDate: Date? {
         return _expiresDate
     }
-    
-    /// Whether the receiver is session-only.
-    ///
-    /// `true` if this receiver should be discarded at the end of the
-    /// session (regardless of expiration date), `false` if receiver need not
-    /// be discarded at the end of the session.
     open var isSessionOnly: Bool {
         return _sessionOnly
     }
-    
-    /// The domain of the receiver.
-    ///
-    /// This value specifies URL domain to which the cookie
-    /// should be sent. A domain with a leading dot means the cookie
-    /// should be sent to subdomains as well, assuming certain other
-    /// restrictions are valid. See RFC 2965 for more detail.
     open var domain: String {
         return _domain
     }
-    
-    /// The path of the receiver.
-    ///
-    /// This value specifies the URL path under the cookie's
-    /// domain for which this cookie should be sent. The cookie will also
-    /// be sent for children of that path, so `"/"` is the most general.
     open var path: String {
         return _path
     }
-    
-    /// Whether the receiver should be sent only over secure channels
-    ///
-    /// Cookies may be marked secure by a server (or by a javascript).
-    /// Cookies marked as such must only be sent via an encrypted connection to
-    /// trusted servers (i.e. via SSL or TLS), and should not be delivered to any
-    /// javascript applications to prevent cross-site scripting vulnerabilities. 
     open var isSecure: Bool {
         return _secure
     }
-    
-    /// Whether the receiver should only be sent to HTTP servers per RFC 2965
-    ///
-    /// Cookies may be marked as HTTPOnly by a server (or by a javascript).
-    /// Cookies marked as such must only be sent via HTTP Headers in HTTP Requests
-    /// for URL's that match both the path and domain of the respective Cookies.
-    /// Specifically these cookies should not be delivered to any javascript
-    /// applications to prevent cross-site scripting vulnerabilities.
     open var isHTTPOnly: Bool {
         return _HTTPOnly
     }
-    
-    /// The comment of the receiver.
-    ///
-    /// This value specifies a string which is suitable for
-    /// presentation to the user explaining the contents and purpose of this
-    /// cookie. It may be nil.
     open var comment: String? {
         return _comment
     }
-    
-    /// The comment URL of the receiver.
-    ///
-    /// This value specifies a URL which is suitable for
-    /// presentation to the user as a link for further information about
-    /// this cookie. It may be nil.
-    /*@NSCopying*/ open var commentURL: URL? {
+    open var commentURL: URL? {
         return _commentURL
     }
-    
-    /// The list ports to which the receiver should be sent.
-    ///
-    /// This value specifies an NSArray of NSNumbers
-    /// (containing integers) which specify the only ports to which this
-    /// cookie should be sent.
-    ///
-    /// The array may be nil, in which case this cookie can be sent to any
-    /// port.
     open var portList: [NSNumber]? {
         return _portList
     }
-    
-    open override var description: String {
-        var str = "<\(type(of: self)) "
-        str += "version:\(self._version) name:\"\(self._name)\" value:\"\(self._value)\" expiresDate:"
-        if let expires = self._expiresDate {
-            str += "\(expires)"
-        } else {
-            str += "nil"
-        }
-        str += " sessionOnly:\(self._sessionOnly) domain:\"\(self._domain)\" path:\"\(self._path)\" isSecure:\(self._secure) comment:"
-        if let comments = self._comment {
-            str += "\(comments)"
-        } else {
-            str += "nil"
-        }
-        str += " ports:{ "
-        if let ports = self._portList {
-            str += "\(NSArray(array: (ports)).componentsJoined(by: ","))"
-        } else {
-            str += "0"
-        }
-        str += " }>"
-        return str
-    }
 }
 
-//utils for cookie parsing
 fileprivate extension String {
     func trim() -> String {
         return self.trimmingCharacters(in: .whitespacesAndNewlines)

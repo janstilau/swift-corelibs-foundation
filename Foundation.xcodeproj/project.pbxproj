@@ -1369,6 +1369,22 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		06973F2425D13DB6009845D1 /* Readed */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Readed;
+			sourceTree = "<group>";
+		};
+		06973F2525D13E46009845D1 /* Readed */ = {
+			isa = PBXGroup;
+			children = (
+				EADE0B611BD15DFF00C49C64 /* HTTPCookieStorage.swift */,
+				EADE0B601BD15DFF00C49C64 /* HTTPCookie.swift */,
+			);
+			name = Readed;
+			sourceTree = "<group>";
+		};
 		5B5D88531BBC938800234F36 = {
 			isa = PBXGroup;
 			children = (
@@ -2001,10 +2017,9 @@
 		F023071D23F0A32B0023DBEC /* FoundationNetworking */ = {
 			isa = PBXGroup;
 			children = (
+				06973F2525D13E46009845D1 /* Readed */,
 				F023076723F0B8730023DBEC /* Boxing.swift */,
 				F023072D23F0B6D70023DBEC /* URLSession */,
-				EADE0B601BD15DFF00C49C64 /* HTTPCookie.swift */,
-				EADE0B611BD15DFF00C49C64 /* HTTPCookieStorage.swift */,
 				EADE0B841BD15DFF00C49C64 /* NSURLRequest.swift */,
 				EADE0B7D1BD15DFF00C49C64 /* URLAuthenticationChallenge.swift */,
 				EADE0B7E1BD15DFF00C49C64 /* URLCache.swift */,
@@ -2029,6 +2044,7 @@
 		F023072323F0A6E50023DBEC /* Foundation */ = {
 			isa = PBXGroup;
 			children = (
+				06973F2425D13DB6009845D1 /* Readed */,
 				F023072523F0B4890023DBEC /* Headers */,
 				F023072423F0B4140023DBEC /* Resources */,
 				EADE0B4D1BD09E0800C49C64 /* AffineTransform.swift */,

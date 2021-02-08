@@ -1,19 +1,3 @@
-#if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
-import SwiftFoundation
-#else
-import Foundation
-#endif
-
-@_implementationOnly import CoreFoundation
-
-/*!
- @enum HTTPCookie.AcceptPolicy
- @abstract Values for the different cookie accept policies
- @constant HTTPCookie.AcceptPolicy.always Accept all cookies
- @constant HTTPCookie.AcceptPolicy.never Reject all cookies
- @constant HTTPCookie.AcceptPolicy.onlyFromMainDocumentDomain Accept cookies
- only from the main document domain
- */
 extension HTTPCookie {
     public enum AcceptPolicy : UInt {
         case always
@@ -22,7 +6,10 @@ extension HTTPCookie {
     }
 }
 
-
+// 这种 storage 的实现思路都是一样的.
+// 文件存储, init 的时候进行 load, 改变之后进行同步.
+// 内存存储, 作为外部的接口使用, get 直接从内存里面读取. set 首先修改内存值, 然后修改文件值.
+// 线程之间的同步处理.
 open class HTTPCookieStorage: NSObject {
     
     private static let sharedStorage = HTTPCookieStorage(cookieStorageName: "shared")
@@ -41,7 +28,6 @@ open class HTTPCookieStorage: NSObject {
         }
     }
     private let syncQ = DispatchQueue(label: "org.swift.HTTPCookieStorage.syncQ")
-    
     private let isEphemeral: Bool
     
     private init(cookieStorageName: String, isEphemeral: Bool = false) {
@@ -49,14 +35,15 @@ open class HTTPCookieStorage: NSObject {
         cookieAcceptPolicy = .always
         self.isEphemeral = isEphemeral
         super.init()
+        
         if !isEphemeral {
             let bundlePath = Bundle.main.bundlePath
             var bundleName = bundlePath.components(separatedBy: "/").last!
             if let range = bundleName.range(of: ".", options: .backwards, range: nil, locale: nil) {
                 bundleName = String(bundleName[..<range.lowerBound])
             }
-            // 去特定的地方, 进行文件的加载.
-            let cookieFolderPath = URL(fileURLWithPath: bundleName, relativeTo: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]).path
+            let cookieFolderPath = URL(fileURLWithPath: bundleName,
+                                       relativeTo: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]).path
             cookieFilePath = filePath(path: cookieFolderPath, fileName: "/.cookies." + cookieStorageName, bundleName: bundleName)
             loadPersistedCookies()
         }
@@ -66,7 +53,9 @@ open class HTTPCookieStorage: NSObject {
         // 在 Swift 里面, if 后面, 不应该仅仅是结果了, 而是很多的过程. 这个过程应该返回一个值 bool 值表示结果.
         guard let cookieFilePath = self.cookieFilePath,
               let cookiesData = try? Data(contentsOf: URL(fileURLWithPath: cookieFilePath))
-        else { return }
+        else {
+            return
+        }
         // 使用 plist 文件, 解析 cooket.
         guard let cookies = try? PropertyListSerialization.propertyList(from: cookiesData, format: nil) else { return }
         let cookies0 = cookies as? [String: [String: Any]] ?? [:]
@@ -96,13 +85,9 @@ open class HTTPCookieStorage: NSObject {
         if directory(with: path) {
             return path + fileName
         }
-        //if we were unable to create the desired directory, create the cookie file
-        //in a subFolder (named after the bundle) of the `pwd`
         return FileManager.default.currentDirectoryPath + "/" + bundleName + fileName
     }
     
-    // `URLSessionConfiguration.ephemeral` needs an ephemeral cookie storage.
-    // Ephemeral cookie storage is an in-memory store and does not load from, and store to, a persistent store.
     internal class func ephemeralStorage() -> HTTPCookieStorage {
         return HTTPCookieStorage(cookieStorageName: "Ephemeral", isEphemeral: true)
     }
@@ -111,13 +96,6 @@ open class HTTPCookieStorage: NSObject {
         return Array(self.syncQ.sync { self.allCookies.values })
     }
     
-    /*!
-     @method sharedHTTPCookieStorage
-     @abstract Get the shared cookie storage in the default location.
-     @result The shared cookie storage
-     @discussion Starting in OS X 10.11, each app has its own sharedHTTPCookieStorage singleton,
-     which will not be shared with other applications.
-     */
     open class var shared: HTTPCookieStorage {
         return sharedStorage
     }
@@ -144,18 +122,12 @@ open class HTTPCookieStorage: NSObject {
         }
     }
     
-    
-    /*!
-     @method setCookie:
-     @abstract Set a cookie
-     @discussion The cookie will override an existing cookie with the
-     same name, domain and path, if any.
-     */
+    // 每次数据的修改, 都是内存值, 文件值的同事修改.
+    // 并且, 应该加锁的时候, 加锁.
     open func setCookie(_ cookie: HTTPCookie) {
         self.syncQ.sync {
             guard cookieAcceptPolicy != .never else { return }
             
-            //add or override
             let key = cookie.domain + cookie.path + cookie.name
             if let _ = allCookies.index(forKey: key) {
                 allCookies.updateValue(cookie, forKey: key)
@@ -163,18 +135,14 @@ open class HTTPCookieStorage: NSObject {
                 allCookies[key] = cookie
             }
             
-            //remove stale cookies, these may include the one we just added
-            let expired = allCookies.filter { (_, value) in value.expiresDate != nil && value.expiresDate!.timeIntervalSinceNow < 0 }
+            // 在这里, 每次 set 的时候, 会把过期的数据, 进行一次清理操作.
+            let expired = allCookies.filter { (_, value) in
+                value.expiresDate != nil && value.expiresDate!.timeIntervalSinceNow < 0 }
             for (key,_) in expired {
                 self.allCookies.removeValue(forKey: key)
             }
-            
             updatePersistentStore()
         }
-    }
-    
-    open override var description: String {
-        return "\(self.isEphemeral ? "Ephemeral" : "")<NSHTTPCookieStorage cookies count:\(cookies?.count ?? 0)>"
     }
     
     private func createCookie(_ properties: [String: Any]) -> HTTPCookie? {
@@ -191,7 +159,6 @@ open class HTTPCookieStorage: NSObject {
     }
     
     private func updatePersistentStore() {
-        // No persistence if this is an ephemeral storage
         if self.isEphemeral { return }
         
         guard let cookieFilePath = self.cookieFilePath else { return }
@@ -200,7 +167,6 @@ open class HTTPCookieStorage: NSObject {
             dispatchPrecondition(condition: DispatchPredicate.onQueue(self.syncQ))
         }
         
-        //persist cookies
         var persistDictionary: [String : [String : Any]] = [:]
         let persistable = self.allCookies.filter { (_, value) in
             value.expiresDate != nil &&
