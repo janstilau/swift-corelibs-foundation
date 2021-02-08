@@ -251,6 +251,8 @@ open class URLCache : NSObject {
         }
     }
     
+    // 这种方式, 利用了 Block 做了收集的工作.
+    // 不是很直观.
     private func enumerateDiskEntries(includingPropertiesForKeys keys: [URLResourceKey] = [],
                                       using block: (DiskEntry, inout Bool) -> Void) {
         guard let directory = cacheDirectory else { return }

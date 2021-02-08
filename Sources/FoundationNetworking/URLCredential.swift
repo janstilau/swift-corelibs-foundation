@@ -1,9 +1,3 @@
-#if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
-import SwiftFoundation
-#else
-import Foundation
-#endif
-
 // 这些, 都是类的设计者的设定而已, 没有什么道理.
 extension URLCredential {
     public enum Persistence : UInt {

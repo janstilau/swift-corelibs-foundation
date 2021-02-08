@@ -1381,6 +1381,10 @@
 			children = (
 				EADE0B611BD15DFF00C49C64 /* HTTPCookieStorage.swift */,
 				EADE0B601BD15DFF00C49C64 /* HTTPCookie.swift */,
+				EADE0B7E1BD15DFF00C49C64 /* URLCache.swift */,
+				EADE0B7F1BD15DFF00C49C64 /* URLCredential.swift */,
+				EADE0B7D1BD15DFF00C49C64 /* URLAuthenticationChallenge.swift */,
+				EADE0B801BD15DFF00C49C64 /* URLCredentialStorage.swift */,
 			);
 			name = Readed;
 			sourceTree = "<group>";
@@ -2021,10 +2025,6 @@
 				F023076723F0B8730023DBEC /* Boxing.swift */,
 				F023072D23F0B6D70023DBEC /* URLSession */,
 				EADE0B841BD15DFF00C49C64 /* NSURLRequest.swift */,
-				EADE0B7D1BD15DFF00C49C64 /* URLAuthenticationChallenge.swift */,
-				EADE0B7E1BD15DFF00C49C64 /* URLCache.swift */,
-				EADE0B7F1BD15DFF00C49C64 /* URLCredential.swift */,
-				EADE0B801BD15DFF00C49C64 /* URLCredentialStorage.swift */,
 				EADE0B821BD15DFF00C49C64 /* URLProtectionSpace.swift */,
 				EADE0B831BD15DFF00C49C64 /* URLProtocol.swift */,
 				5BA9BEA31CF380E8009DBD6C /* URLRequest.swift */,
