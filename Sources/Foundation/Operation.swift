@@ -43,7 +43,32 @@ extension QualityOfService {
     }
 }
 
+/*
+ An abstract class that represents the code and data associated with a single task.
+ 一个, 实现了命令模式的抽象数据类. 提供了 operation call 操作符的接口.
+ 并且, 里面有很多调度类所需要的参数. 所以这个类已经不是单纯的对于 Callable 的封装了, 它更多的体现了和 OperationQueue 之间的配合.
+ 
+ The presence of this built-in logic allows you to focus on the actual implementation of your task,
+ rather than on the glue code needed to ensure it works correctly with other system objects.
+ 
+ An operation queue executes its operations either directly, by running them on secondary threads,
+ or indirectly using the libdispatch library (also known as Grand Central Dispatch)
+ 在这里, 是使用了 GCD, 在 GNU 的版本里面, 是自己控制的线程.
+ 
+ Operation Dependencies
+ Dependency 这个概念, 完全是 Queue 所关心的. 它是 Queue 调度队列的一个依据.
+
+ KVO-Compliant Properties
+ kvo 可以简化代码的逻辑, 在 Gnu 的代码里面, 就是通过监听 各个属性, 进行任务队列的排序, 等待任务队列, Read 任务队列数据的切换的.
+ 
+ Asynchronous Versus Synchronous Operations
+ Operation 有一个 isAsynchronous 的属性, 不过 Queue 不 Care. 当自己调用 start 方法的时候, isAsynchronous 可以控制开辟线程完成自己的任务. 这个属性在 GNU 里面, 没有体现.
+ */
+
+// 只要是数据相关的部分, 都进行了加锁.
 open class Operation : NSObject {
+    
+    // PointerHashedUnmanagedBox 这个类, 主要是对于 T 的 Hash 功能的体现.
     struct PointerHashedUnmanagedBox<T: AnyObject>: Hashable {
         var contents: Unmanaged<T>
         func hash(into hasher: inout Hasher) {
@@ -53,6 +78,9 @@ open class Operation : NSObject {
             return lhs.contents.toOpaque() == rhs.contents.toOpaque()
         }
     }
+    
+    // 一个枚举类, 专门用来代表任务的状态.
+    // 这个顺序是有序的, 后面 isFinished 里面, 使用到了这个顺序.
     enum __NSOperationState : UInt8 {
         case initialized = 0x00
         case enqueuing = 0x48
@@ -64,12 +92,12 @@ open class Operation : NSObject {
         case finished = 0xF4
     }
     
-    // 数据部分.
+    // 数据部分. 所有的都是私有数据, 外界使用, 用更好的属性接口.
     internal var __previousOperation: Unmanaged<Operation>?
     internal var __nextOperation: Unmanaged<Operation>?
     internal var __nextPriorityOperation: Unmanaged<Operation>?
     internal var __queue: Unmanaged<OperationQueue>?
-    internal var __dependencies = [Operation]()
+    internal var __dependencies = [Operation]() // 依赖项.
     internal var __downDependencies = Set<PointerHashedUnmanagedBox<Operation>>()
     internal var __unfinishedDependencyCount: Int = 0
     internal var __completion: (() -> Void)?
@@ -98,6 +126,7 @@ open class Operation : NSObject {
         }
     }
     
+    // 首先, 当前的状态得是 old, 如果是, 那么改变为 new
     internal func _compareAndSwapState(_ old: __NSOperationState, _ new: __NSOperationState) -> Bool {
         __atomicLoad.lock()
         defer { __atomicLoad.unlock() }
@@ -106,6 +135,7 @@ open class Operation : NSObject {
         return true
     }
     
+    // 将 __lock.lock 封装成为一个小的方法.
     internal func _lock() {
         __lock.lock()
     }
@@ -123,6 +153,7 @@ open class Operation : NSObject {
     internal func _adopt(queue: OperationQueue, schedule: DispatchWorkItem) {
         _lock()
         defer { _unlock() }
+        // 这里, retain 了 Operation 相关的 Queue.
         __queue = Unmanaged.passRetained(queue)
         __schedule = schedule
     }
@@ -213,6 +244,7 @@ open class Operation : NSObject {
     }
     
     internal static func observeValue(forKeyPath keyPath: String, ofObject op: Operation) {
+        // 在方法内部定义枚举, 将作用域范围控制了起来.
         enum Transition {
             case toFinished
             case toExecuting
@@ -282,6 +314,7 @@ open class Operation : NSObject {
                     }
                 }
                 
+                // 当 op Finish 之后, 调用自己的 __waitCondition 的唤醒服务, 使得别的线程因为 wait 的代码重新执行.
                 op.__waitCondition.lock()
                 op.__waitCondition.broadcast()
                 op.__waitCondition.unlock()
@@ -304,6 +337,7 @@ open class Operation : NSObject {
                 }
                 op._unlock()
             case .toReady:
+                // 当, operation 处于 ready 状态了. 就调动它的 queue 的调度算法.
                 let r = op.isReady
                 op._cachedIsReady = r
                 let q = op._queue
@@ -319,6 +353,7 @@ open class Operation : NSObject {
     open func start() {
         let state = _state
         if __NSOperationState.finished == state { return }
+        
         if !_compareAndSwapState(__NSOperationState.initialized, __NSOperationState.starting) && !(__NSOperationState.starting == state && __queue != nil) {
             switch state {
             case .executing: fallthrough
@@ -338,7 +373,7 @@ open class Operation : NSObject {
         if !isCanc {
             _state = .executing
             Operation.observeValue(forKeyPath: _NSOperationIsExecuting, ofObject: self)
-            
+            // 如果有 queue, 就是在 queue 里面调用自己, 不然就直接调用 main.
             _queue?._execute(self) ?? main()
         }
         
@@ -352,6 +387,7 @@ open class Operation : NSObject {
         }
     }
     
+    // 这个方法, 就是 templateMethod 需要自定义的一环, 在子类中重写.
     open func main() { }
     
     open var isCancelled: Bool {
@@ -375,7 +411,7 @@ open class Operation : NSObject {
         Operation.observeValue(forKeyPath: _NSOperationIsReady, ofObject: self)
     }
     
-    
+    // Operation state 记录了自己的状态, 但是这个状态, 不应该由外界知道, 需要使用 property 包装一层.
     open var isExecuting: Bool {
         return __NSOperationState.executing == _state
     }
@@ -388,17 +424,22 @@ open class Operation : NSObject {
         return false
     }
     
+    // Operation ready 了, 就是没有依赖了.
     open var isReady: Bool {
         _lock()
         defer { _unlock() }
         return __unfinishedDependencyCount == 0
     }
     
+    // 这样写, 就不用写捕获列表了????
     internal func _addDependency(_ op: Operation) {
         withExtendedLifetime(self) {
             withExtendedLifetime(op) {
+                
                 var up: Operation?
+                
                 _lock()
+                // 如果, 之前依赖里面没有, 那么才把参数添加到 __dependencies 中去.
                 if __dependencies.first(where: { $0 === op }) == nil {
                     __dependencies.append(op)
                     up = op
@@ -406,6 +447,7 @@ open class Operation : NSObject {
                 _unlock()
                 
                 if let upwards = up {
+                    // 锁的顺序要注意栈式顺序.
                     upwards._lock()
                     _lock()
                     let upIsFinished = upwards._state == __NSOperationState.finished
@@ -565,6 +607,7 @@ open class Operation : NSObject {
         }
     }
     
+    // Operation wait, 是 Operation 的行为, 所以 __waitCondition 应该在 Operation 上, 在任务结束之后, 使用同样的 Condition 进行唤醒.
     open func waitUntilFinished() {
         __waitCondition.lock()
         while !isFinished {
@@ -621,6 +664,7 @@ extension Operation {
 }
 
 extension Operation {
+    
     public enum QueuePriority : Int {
         case veryLow = -8
         case low = -4
@@ -629,6 +673,7 @@ extension Operation {
         case veryHigh = 8
         
         internal static var barrier = 12
+        
         internal static let priorities = [
             Operation.QueuePriority.barrier,
             Operation.QueuePriority.veryHigh.rawValue,
@@ -643,11 +688,11 @@ extension Operation {
 open class BlockOperation : Operation {
     var _block: (() -> Void)?
     var _executionBlocks: [() -> Void]?
-    
     public override init() {
-        
     }
     
+    // 所有的, 都是 escaping 的, 因为实际上, BlockOperation 一定是异步调用的.
+    // 就算是后面直接调用 start 方法, 也是先把 block 存起来后才去调用的.
     public convenience init(block: @escaping () -> Void) {
         self.init()
         _block = block
@@ -668,10 +713,14 @@ open class BlockOperation : Operation {
         }
     }
     
+    // readonly 的属性, 没有 get, 只有 get.
     open var executionBlocks: [() -> Void] {
         get {
+            // 这种写法, 会很常见, 当 lock 可以全部控制整个代码块的时候
+            // 在下面, 为了效率不应全部锁住, 就在适当的地方调用 unlock 了.
             _lock()
             defer { _unlock() }
+            
             var blocks = [() -> Void]()
             if let existing = _block {
                 blocks.append(existing)
@@ -684,7 +733,8 @@ open class BlockOperation : Operation {
     }
     
     open override func main() {
-        var blocks = [() -> Void]()
+        var blocks = [() -> Void]() // 定义一个数组. 这里是直接使用了 Block 的类型.
+        // 抽取数据的部分, 使用 lock, 真正执行的部分, 不用 lock.
         _lock()
         if let existing = _block {
             blocks.append(existing)
@@ -693,6 +743,7 @@ open class BlockOperation : Operation {
             blocks.append(contentsOf: existing)
         }
         _unlock()
+        // 实际上, 真正的逻辑, 就是遍历调用里面的 block. 所以, 实际上所有的 block 都是运行在一个线程里面.
         for block in blocks {
             block()
         }
@@ -704,7 +755,6 @@ internal final class _BarrierOperation : Operation {
     init(_ block: @escaping () -> Void) {
         _block = block
     }
-    
     override func main() {
         _lock()
         let block = _block
@@ -753,7 +803,14 @@ open class OperationQueue : NSObject, ProgressReporting {
     let __atomicLoad = NSLock()
     var __firstOperation: Unmanaged<Operation>?
     var __lastOperation: Unmanaged<Operation>?
-    var __firstPriorityOperation: (barrier: Unmanaged<Operation>?, veryHigh: Unmanaged<Operation>?, high: Unmanaged<Operation>?, normal: Unmanaged<Operation>?, low: Unmanaged<Operation>?, veryLow: Unmanaged<Operation>?)
+    // 这是一个元组, 存储着各个优先级的第一个任务.
+    // 所以, 其实在 Queue 里面, 是按照优先级, 有着很多个队列在维护着.
+    var __firstPriorityOperation: (barrier: Unmanaged<Operation>?,
+                                   veryHigh: Unmanaged<Operation>?,
+                                   high: Unmanaged<Operation>?,
+                                   normal: Unmanaged<Operation>?,
+                                   low: Unmanaged<Operation>?,
+                                   veryLow: Unmanaged<Operation>?)
     var __lastPriorityOperation: (barrier: Unmanaged<Operation>?, veryHigh: Unmanaged<Operation>?, high: Unmanaged<Operation>?, normal: Unmanaged<Operation>?, low: Unmanaged<Operation>?, veryLow: Unmanaged<Operation>?)
     var _barriers = [_BarrierOperation]()
     var _progress: _OperationQueueProgress?
@@ -918,6 +975,8 @@ open class OperationQueue : NSObject, ProgressReporting {
         }
     }
     
+    // 类似懒加载的技术, 将 queue 背后的 dispatch quueue 生成.
+    // 都是 concurrent 的.
     internal func _synthesizeBackingQueue() -> DispatchQueue {
         guard let queue = __backingQueue else {
             let queue: DispatchQueue
@@ -942,11 +1001,12 @@ open class OperationQueue : NSObject, ProgressReporting {
     
     static internal var _currentQueue = NSThreadSpecific<OperationQueue>()
     
+    // 从 GCD 里面调度, GCD 里面封装的任务, 调用 _schedule(_ op: Operation)
     internal func _schedule(_ op: Operation) {
         op._state = .starting
         // set current tsd
         OperationQueue._currentQueue.set(self)
-        op.start()
+        op.start() //
         OperationQueue._currentQueue.clear()
         // We've just cleared _currentQueue storage.
         // NSThreadSpecific doesn't release stored value on clear.
@@ -969,6 +1029,7 @@ open class OperationQueue : NSObject, ProgressReporting {
             }
             var op = _firstPriorityOperation(prio)
             var prev: Unmanaged<Operation>?
+            
             while let operation = op?.takeUnretainedValue() {
                 if 0 >= slotsAvail || _suspended {
                     break
@@ -1043,7 +1104,7 @@ open class OperationQueue : NSObject, ProgressReporting {
         operationProgress?.becomeCurrent(withPendingUnitCount: 1)
         defer { operationProgress?.resignCurrent() }
         
-        op.main()
+        op.main() // 就是调用 op 的 main.
     }
     
     internal var _maxNumOps: Int {
@@ -1086,6 +1147,7 @@ open class OperationQueue : NSObject, ProgressReporting {
         return cnt
     }
     
+    // 遍历链表, 把所有的 Operation 收集起来, 然后返回.
     internal func _operations(includingBarriers: Bool = false) -> [Operation] {
         _lock()
         defer { _unlock() }
@@ -1111,12 +1173,7 @@ open class OperationQueue : NSObject, ProgressReporting {
         __maxNumOps = 1
         __actualMaxNumOps = 1
         __name = "NSOperationQueue Main Queue"
-        #if canImport(Darwin)
         __propertyQoS = QualityOfService(qos_class_main())
-        #else
-        __propertyQoS = QualityOfService.userInteractive
-        #endif
-        
     }
     
     open var progress: Progress {
@@ -1132,21 +1189,26 @@ open class OperationQueue : NSObject, ProgressReporting {
         }
     }
     
+    // 向队列里面, 添加任务的核心逻辑.
     internal func _addOperations(_ ops: [Operation], barrier: Bool = false) {
         if ops.isEmpty { return }
         
         var failures = 0
         var successes = 0
-        var firstNewOp: Unmanaged<Operation>?
+        var listHead: Unmanaged<Operation>?
         var lastNewOp: Unmanaged<Operation>?
+        
         for op in ops {
+            // 因为 Operation 是不可以复用的, 所以必然应该是 init 的状态.
             if op._compareAndSwapState(.initialized, .enqueuing) {
                 successes += 1
                 if 0 == failures {
-                    let retained = Unmanaged.passRetained(op)
+                    let retainedOperation = Unmanaged.passRetained(op)
+                    // 在入队的时候, 先记录一下 Operation 的 read 状态.
                     op._cachedIsReady = op.isReady
-                    let schedule: DispatchWorkItem
                     
+                    let schedule: DispatchWorkItem
+                    // 如果, 设置了优先级, 那么就按照优先级执行任务. 否则就使用当前环境的.
                     if let qos = op.__propertyQoS?.qosClass {
                         schedule = DispatchWorkItem.init(qos: qos, flags: .enforceQoS, block: {
                             self._schedule(op)
@@ -1156,15 +1218,17 @@ open class OperationQueue : NSObject, ProgressReporting {
                             self._schedule(op)
                         })
                     }
+                    // 在这里, 一个 Operation, 和 Queue, 以及实际会执行的 GCD 任务绑定了.
                     op._adopt(queue: self, schedule: schedule)
                     op.__previousOperation = lastNewOp
                     op.__nextOperation = nil
+                    // 这里, 维护了 Operation 之间的一个链表.
                     if let lastNewOperation = lastNewOp?.takeUnretainedValue() {
-                        lastNewOperation.__nextOperation = retained
+                        lastNewOperation.__nextOperation = retainedOperation
                     } else {
-                        firstNewOp = retained
+                        listHead = retainedOperation
                     }
-                    lastNewOp = retained
+                    lastNewOp = retainedOperation
                 } else {
                     _ = op._compareAndSwapState(.enqueuing, .initialized)
                 }
@@ -1173,27 +1237,28 @@ open class OperationQueue : NSObject, ProgressReporting {
             }
         }
         
+        // 这里, 如果有失败的其实是就崩了, 先不管.
         if 0 < failures {
-            while let firstNewOperation = firstNewOp?.takeUnretainedValue() {
-                let nextNewOp = firstNewOperation.__nextOperation
-                firstNewOperation._invalidateQueue()
-                firstNewOperation.__previousOperation = nil
-                firstNewOperation.__nextOperation = nil
-                _ = firstNewOperation._compareAndSwapState(.enqueuing, .initialized)
-                firstNewOp?.release()
-                firstNewOp = nextNewOp
+            while let currentOpertion = listHead?.takeUnretainedValue() {
+                let nextNewOp = currentOpertion.__nextOperation
+                currentOpertion._invalidateQueue()
+                currentOpertion.__previousOperation = nil
+                currentOpertion.__nextOperation = nil
+                _ = currentOpertion._compareAndSwapState(.enqueuing, .initialized)
+                listHead?.release()
+                listHead = nextNewOp
             }
             fatalError("operations finished, executing or already in a queue cannot be enqueued")
         }
         
         // Attach any operations pending attachment to main list
-        
         if !barrier {
             _lock()
             _incrementOperationCount()
         }
         
-        var pending = firstNewOp
+        // 这里是将插入的链表, 和 queue 的链表进行挂钩.
+        var pending = listHead
         if let pendingOperation = pending?.takeUnretainedValue() {
             let old_last = __lastOperation
             pendingOperation.__previousOperation = old_last
@@ -1204,9 +1269,13 @@ open class OperationQueue : NSObject, ProgressReporting {
             }
             __lastOperation = lastNewOp
         }
+        
         while let pendingOperation = pending?.takeUnretainedValue() {
+            
             if !barrier {
                 var barrierOp = _firstPriorityOperation(Operation.QueuePriority.barrier)
+                // 这里, 为什么可以 barrier 就在于此了, 普通的任务, 要将当前的 barrier 任务, 添加为依赖, 这样只有当 barrier 的任务完成之后, 普通的任务才能执行.
+                // 从队列的角度来说, 就是 barrier 的任务不完成, 普通的任务, 就没有机会进行调度.
                 while let barrierOperation = barrierOp?.takeUnretainedValue() {
                     pendingOperation._addDependency(barrierOperation)
                     barrierOp = barrierOperation.__nextPriorityOperation
@@ -1214,7 +1283,9 @@ open class OperationQueue : NSObject, ProgressReporting {
             }
             
             _ = pendingOperation._compareAndSwapState(.enqueuing, .enqueued)
+            
             var pri = pendingOperation.__priorityValue
+            // 如果, 没有设置 __priorityValue , 那么 Queue 中会计算, 根据 QoS 的值进行转化, 或者直接用 normal
             if pri == nil {
                 let v = __actualMaxNumOps == 1 ? nil : pendingOperation.__propertyQoS
                 if let qos = v {
@@ -1229,6 +1300,7 @@ open class OperationQueue : NSObject, ProgressReporting {
                     pri = Operation.QueuePriority.normal.rawValue
                 }
             }
+            // 这里, 就是将对应的任务, 连接到 Queue 所维护的队列的末尾了.
             pendingOperation.__nextPriorityOperation = nil
             if let old_last = _lastPriorityOperation(pri)?.takeUnretainedValue() {
                 old_last.__nextPriorityOperation = pending
@@ -1252,6 +1324,16 @@ open class OperationQueue : NSObject, ProgressReporting {
         _addOperations([op], barrier: false)
     }
     
+    // 添加 block, 就是将 Block 纳入到 Operation 的抽象里面, 然后添加到队列里面.
+    open func addOperation(_ block: @escaping () -> Void) {
+        let op = BlockOperation(block: block)
+        if let qos = __propertyQoS {
+            op.qualityOfService = qos
+        }
+        addOperation(op)
+    }
+    
+    // wait 这个行为, 是 Operation 的行为, 所以 waitCondition 在 Operation 上, 相应的方法, 也在 Operation 上.
     open func addOperations(_ ops: [Operation], waitUntilFinished wait: Bool) {
         _addOperations(ops, barrier: false)
         if wait {
@@ -1259,14 +1341,6 @@ open class OperationQueue : NSObject, ProgressReporting {
                 op.waitUntilFinished()
             }
         }
-    }
-    
-    open func addOperation(_ block: @escaping () -> Void) {
-        let op = BlockOperation(block: block)
-        if let qos = __propertyQoS {
-            op.qualityOfService = qos
-        }
-        addOperation(op)
     }
     
     open func addBarrierBlock(_ barrier: @escaping () -> Void) {
@@ -1286,6 +1360,8 @@ open class OperationQueue : NSObject, ProgressReporting {
         }
         _unlock()
         
+        // 因为, 这个 Queue 里面的所有任务, 其实都是放到了一个队列里面, 所以, 这个队列 barrier, 其实就是这个任务 barrier.
+        // 队列的 barrier, 先用自己设计的算法去理解.
         if let q = queue {
             q.async(flags: .barrier, execute: barrier)
         } else {
@@ -1293,14 +1369,12 @@ open class OperationQueue : NSObject, ProgressReporting {
         }
     }
     
+    // 在修改了, 可以影响到调度策略的数值后, 重新调用调度算法.
     open var maxConcurrentOperationCount: Int {
         get {
             return _maxNumOps
         }
         set(newValue) {
-            if newValue < 0 && newValue != OperationQueue.defaultMaxConcurrentOperationCount {
-                fatalError("count (\(newValue)) cannot be negative")
-            }
             if !__mainQ {
                 _lock()
                 _maxNumOps = newValue
@@ -1313,6 +1387,7 @@ open class OperationQueue : NSObject, ProgressReporting {
         }
     }
     
+    // 在修改了, 可以影响到调度策略的数值后, 重新调用调度算法.
     open var isSuspended: Bool {
         get {
             return _isSuspended
@@ -1355,6 +1430,7 @@ open class OperationQueue : NSObject, ProgressReporting {
         }
     }
     
+    // 有这个量, 其实可以证明, OperationQueue 的底层, 就是 GCD 了.
     unowned(unsafe) open var underlyingQueue: DispatchQueue? {
         get {
             if __mainQ {
@@ -1375,6 +1451,8 @@ open class OperationQueue : NSObject, ProgressReporting {
         }
     }
     
+    // cancle 是对于 Operation 的操作, 而不是队列的操作.
+    // 所以这里不需要加锁, Queue 所控制的数据都没有发生改变.
     open func cancelAllOperations() {
         if !__mainQ {
             for op in _operations(includingBarriers: true) {
@@ -1387,6 +1465,8 @@ open class OperationQueue : NSObject, ProgressReporting {
         var ops = _operations(includingBarriers: true)
         while 0 < ops.count {
             for op in ops {
+                // 当前线程进行了 wait, 但是在其他线程, 可以继续完成任务, 并对队列进行改变.
+                // 所以在唤醒之后, 重新进行任务的获取.
                 op.waitUntilFinished()
             }
             ops = _operations(includingBarriers: true)
@@ -1404,6 +1484,9 @@ open class OperationQueue : NSObject, ProgressReporting {
     
     open class var main: OperationQueue {
         get {
+            // 为什么要这面写???
+            // SWIFT不支持静态变量而不将其附加到类/结构中。尝试使用静态变量声明私有结构。
+            // 如果, 想要达成在函数内使用静态变量的目的, 应该在函数内定义一个类型, 然后将这个 static 挂钩到这个类型上.
             struct Once {
                 static let mainQ = OperationQueue(asMainQueue: ())
             }
@@ -1415,15 +1498,12 @@ open class OperationQueue : NSObject, ProgressReporting {
 extension OperationQueue {
     // These two functions are inherently a race condition and should be avoided if possible
     
-    @available(OSX, introduced: 10.5, deprecated: 100000, message: "access to operations is inherently a race condition, it should not be used. For barrier style behaviors please use addBarrierBlock: instead")
     open var operations: [Operation] {
         get {
             return _operations(includingBarriers: false)
         }
     }
     
-    
-    @available(OSX, introduced: 10.6, deprecated: 100000)
     open var operationCount: Int {
         get {
             return _operationCount

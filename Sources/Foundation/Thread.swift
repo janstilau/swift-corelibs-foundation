@@ -3,8 +3,8 @@
 
 internal typealias _swift_CFThreadRef = pthread_t
 
+// NSThreadSpecific 这个类没有暴露出去.
 internal class NSThreadSpecific<T: NSObject> {
-    // 不应该暴露出去的, private 封装.
     private var key = _CFThreadSpecificKeyCreate()
     
     // 有着副作用的 get 方法.

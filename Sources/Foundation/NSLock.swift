@@ -6,6 +6,7 @@ public protocol NSLocking {
 }
 
 // _RecursiveMutexPointer 和 _MutexPointer 的区别, 主要在于, mutext 初始化的时候, 属性的设置.
+// typealias, 也可以增加 private 控制.
 private typealias _MutexPointer = UnsafeMutablePointer<pthread_mutex_t>
 private typealias _RecursiveMutexPointer = UnsafeMutablePointer<pthread_mutex_t>
 private typealias _ConditionVariablePointer = UnsafeMutablePointer<pthread_cond_t>
@@ -16,7 +17,6 @@ open class NSLock: NSObject, NSLocking {
     private var timeoutMutex = _MutexPointer.allocate(capacity: 1)
 
     public override init() {
-        // NSLock 控制的资源, 在 init 方法里面, 调用 C 方法, 进行初始化.
         pthread_mutex_init(mutex, nil)
         pthread_cond_init(timeoutCond, nil)
         pthread_mutex_init(timeoutMutex, nil)
@@ -40,6 +40,7 @@ open class NSLock: NSObject, NSLocking {
         pthread_mutex_unlock(timeoutMutex)
     }
 
+    // try 在当前不能获取到所的情况下, 直接返回 false, 目前没有用到这种场景.
     open func `try`() -> Bool {
         return pthread_mutex_trylock(mutex) == 0
     }
@@ -63,7 +64,7 @@ open class NSLock: NSObject, NSLocking {
 }
 
 // 所谓的, Lock 的 synchronized, 就是加锁解锁的封装.
-// 而且, 根据传入的闭包, 返回对应的类型的值.
+// 这个封装很好, 将固定的部分进行了封装. 更大的意义在于, Lock 是一个比较危险的资源, 这种封装可以减少用户使用错误的机会.
 extension NSLock {
     internal func synchronized<T>(_ closure: () -> T) -> T {
         self.lock()
@@ -91,11 +92,7 @@ open class NSConditionLock : NSObject, NSLocking {
 
     open func unlock() {
         _cond.lock()
-#if os(Windows)
-        _thread = INVALID_HANDLE_VALUE
-#else
         _thread = nil
-#endif
         _cond.broadcast()
         _cond.unlock()
     }
@@ -266,93 +263,54 @@ open class NSRecursiveLock: NSObject, NSLocking {
     open var name: String?
 }
 
+// NSCondition 里面会有一个 mutex, 一个 Conditon.
+// 最最原始的使用, 是一个 pthread_cond_t, 一个 pthread_mutex_t 之间配合.
+// iOS 里面, NSCondition 将这两个封到了一起.
+// 这样, NSCondition 本身也就是一把锁了.
 open class NSCondition: NSObject, NSLocking {
     internal var mutex = _MutexPointer.allocate(capacity: 1)
     internal var cond = _ConditionVariablePointer.allocate(capacity: 1)
 
     public override init() {
-#if os(Windows)
-        InitializeSRWLock(mutex)
-        InitializeConditionVariable(cond)
-#else
         pthread_mutex_init(mutex, nil)
         pthread_cond_init(cond, nil)
-#endif
     }
     
     deinit {
-#if os(Windows)
-        // SRWLock do not need to be explicitly destroyed
-#else
         pthread_mutex_destroy(mutex)
         pthread_cond_destroy(cond)
-#endif
-        mutex.deinitialize(count: 1)
-        cond.deinitialize(count: 1)
-        mutex.deallocate()
-        cond.deallocate()
     }
     
     open func lock() {
-#if os(Windows)
-        AcquireSRWLockExclusive(mutex)
-#else
         pthread_mutex_lock(mutex)
-#endif
     }
     
     open func unlock() {
-#if os(Windows)
-        ReleaseSRWLockExclusive(mutex)
-#else
         pthread_mutex_unlock(mutex)
-#endif
     }
     
     open func wait() {
-#if os(Windows)
-        SleepConditionVariableSRW(cond, mutex, WinSDK.INFINITE, 0)
-#else
         pthread_cond_wait(cond, mutex)
-#endif
     }
 
     open func wait(until limit: Date) -> Bool {
-#if os(Windows)
-        return SleepConditionVariableSRW(cond, mutex, timeoutFrom(date: limit), 0)
-#else
         guard var timeout = timeSpecFrom(date: limit) else {
             return false
         }
         return pthread_cond_timedwait(cond, mutex, &timeout) == 0
-#endif
     }
     
     open func signal() {
-#if os(Windows)
-        WakeConditionVariable(cond)
-#else
         pthread_cond_signal(cond)
-#endif
     }
     
     open func broadcast() {
-#if os(Windows)
-        WakeAllConditionVariable(cond)
-#else
         pthread_cond_broadcast(cond)
-#endif
     }
     
     open var name: String?
 }
 
-#if os(Windows)
-private func timeoutFrom(date: Date) -> DWORD {
-  guard date.timeIntervalSinceNow > 0 else { return 0 }
-  return DWORD(date.timeIntervalSinceNow * 1000)
-}
-#else
 private func timeSpecFrom(date: Date) -> timespec? {
     guard date.timeIntervalSinceNow > 0 else {
         return nil
@@ -364,7 +322,6 @@ private func timeSpecFrom(date: Date) -> timespec? {
     return timespec(tv_sec: time_t(intervalNS / nsecPerSec),
                     tv_nsec: Int(intervalNS % nsecPerSec))
 }
-#endif
 
 #if os(macOS) || os(iOS) || os(Windows)
 
