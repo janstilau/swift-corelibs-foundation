@@ -15,11 +15,9 @@ internal let kCFRunLoopAllActivities = CFRunLoopActivity.allActivities.rawValue
 extension RunLoop {
     public struct Mode : RawRepresentable, Equatable, Hashable {
         public private(set) var rawValue: String
-
         public init(_ rawValue: String) {
             self.rawValue = rawValue
         }
-
         public init(rawValue: String) {
             self.rawValue = rawValue
         }
@@ -57,19 +55,19 @@ open class RunLoop: NSObject {
     internal static var _mainRunLoop : RunLoop = {
         return RunLoop(cfObject: CFRunLoopGetMain())
     }()
-
+    
     internal init(cfObject : CFRunLoop) {
         _cfRunLoopStorage = cfObject
     }
-
+    
     open class var current: RunLoop {
         return _CFRunLoopGet2(CFRunLoopGetCurrent()) as! RunLoop
     }
-
+    
     open class var main: RunLoop {
         return _CFRunLoopGet2(CFRunLoopGetMain()) as! RunLoop
     }
-
+    
     open var currentMode: RunLoop.Mode? {
         if let mode = CFRunLoopCopyCurrentMode(_cfRunLoop) {
             return RunLoop.Mode(mode._swiftObject)
@@ -80,27 +78,27 @@ open class RunLoop: NSObject {
     
     // On platforms where it's available, getCFRunLoop() can be overridden and we use it below.
     // Make sure we honor the override -- var currentCFRunLoop will do so on platforms where overrides are available.
-
+    
     #if os(Linux) || os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
     internal var currentCFRunLoop: CFRunLoop { getCFRunLoop() }
-
+    
     @available(*, deprecated, message: "Directly accessing the run loop may cause your code to not become portable in the future.")
     open func getCFRunLoop() -> CFRunLoop {
         return _cfRunLoop
     }
     #else
     internal var currentCFRunLoop: CFRunLoop { _cfRunLoop }
-
+    
     @available(*, unavailable, message: "Core Foundation is not available on your platform.")
     open func getCFRunLoop() -> Never {
         fatalError()
     }
     #endif
-
+    
     open func add(_ timer: Timer, forMode mode: RunLoop.Mode) {
         CFRunLoopAddTimer(_cfRunLoop, timer._cfObject, mode._cfStringUniquingKnown)
     }
-
+    
     private let monitoredPortsWithModesLock = NSLock() // guards:
     private var monitoredPortsWithModes: [Port: Set<RunLoop.Mode>] = [:]
     private var monitoredPortObservers:  [Port: NSObjectProtocol]  = [:]
@@ -135,7 +133,7 @@ open class RunLoop: NSObject {
             monitoredPortsWithModes.removeValue(forKey: aPort)
         }
     }
-
+    
     open func remove(_ aPort: Port, forMode mode: RunLoop.Mode) {
         var shouldRemove = false
         monitoredPortsWithModesLock.synchronized {
@@ -159,7 +157,7 @@ open class RunLoop: NSObject {
             aPort.remove(from: self, forMode: mode)
         }
     }
-
+    
     open func limitDate(forMode mode: RunLoop.Mode) -> Date? {
         if _cfRunLoop !== CFRunLoopGetCurrent() {
             return nil
@@ -172,33 +170,38 @@ open class RunLoop: NSObject {
         }
         
         let nextTimerFireAbsoluteTime = CFRunLoopGetNextTimerFireDate(CFRunLoopGetCurrent(), modeArg)
-
+        
         if (nextTimerFireAbsoluteTime == 0) {
             return Date.distantFuture
         }
-
+        
         return Date(timeIntervalSinceReferenceDate: nextTimerFireAbsoluteTime)
     }
-
+    
     open func acceptInput(forMode mode: String, before limitDate: Date) {
         if _cfRunLoop !== CFRunLoopGetCurrent() {
             return
         }
         CFRunLoopRunInMode(mode._cfObject, limitDate.timeIntervalSinceReferenceDate - CFAbsoluteTimeGetCurrent(), true)
     }
-
+    
 }
 
 extension RunLoop {
-
+    
     public func run() {
         while run(mode: .default, before: Date.distantFuture) { }
     }
-
+    
+    // 这里, 增加了时间限制, 所以每次循环的时候, 还会增加对于时间的判断.
     public func run(until limitDate: Date) {
-        while run(mode: .default, before: limitDate) && limitDate.timeIntervalSinceReferenceDate > CFAbsoluteTimeGetCurrent() { }
+        while run(mode: .default, before: limitDate) &&
+                limitDate.timeIntervalSinceReferenceDate > CFAbsoluteTimeGetCurrent()
+        {
+                // Empty
+        }
     }
-
+    
     public func run(mode: RunLoop.Mode, before limitDate: Date) -> Bool {
         if _cfRunLoop !== CFRunLoopGetCurrent() {
             return false
@@ -210,10 +213,11 @@ extension RunLoop {
         
         let limitTime = limitDate.timeIntervalSinceReferenceDate
         let ti = limitTime - CFAbsoluteTimeGetCurrent()
+        // 其实, 这里面就是读取数据, 处理数据.
         CFRunLoopRunInMode(modeArg, ti, true)
         return true
     }
-
+    
     public func perform(inModes modes: [RunLoop.Mode], block: @escaping () -> Void) {
         CFRunLoopPerformBlock(currentCFRunLoop, (modes.map { $0._cfStringUniquingKnown })._cfObject, block)
     }
@@ -385,7 +389,7 @@ extension RunLoop {
         open var order: Int {
             Int(CFRunLoopSourceGetOrder(cfSource))
         }
-
+        
         open var isValid: Bool {
             CFRunLoopSourceIsValid(cfSource)
         }
@@ -402,6 +406,6 @@ extension RunLoop {
 
 extension RunLoop._Source {
     fileprivate var cfSource: CFRunLoopSource {
-      unsafeBitCast(_cfSourceStorage, to: CFRunLoopSource.self)
+        unsafeBitCast(_cfSourceStorage, to: CFRunLoopSource.self)
     }
 }

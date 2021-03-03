@@ -3,11 +3,16 @@
 
 internal typealias _swift_CFThreadRef = pthread_t
 
-// NSThreadSpecific 这个类没有暴露出去.
+// 这个类, 主要就是向现场注册一些私有值的.
+// 每个线程里面, 都有一个类似字典的东西, 传入 key 之后就会返回对应的 value/
+// NSThreadSpecific 一般是类的静态变量, 将自己注册到线程的字典存储里面.
+// 在这里, 是在 NSThread 的启动函数里面指定的 set. 因为如此, NSThread 才会和 pthread 所挂钩.
 internal class NSThreadSpecific<T: NSObject> {
+    
     private var key = _CFThreadSpecificKeyCreate()
     
-    // 有着副作用的 get 方法.
+    // 可以填充默认值的 get 方法.
+    // 因为可能不是所有的线程, 都是 NSThread 创建的. 所以可能返回 nil.
     internal func get(_ generator: () -> T) -> T {
         if let specific = _CFThreadSpecificGet(key) {
             return specific as! T
@@ -38,15 +43,20 @@ internal enum _NSThreadStatus {
     case finished
 }
 
+// 同 Pthread 一样, 线程的入口函数.
+// 这个函数里面, 会在调用 main 之前, 做一些 thread 的状态值的修改.
 private func NSThreadStart(_ context: UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer? {
+    // unretainedReference 这个函数, 根据返回值的类型, 确定返回的类型.
     let thread: Thread = NSObject.unretainedReference(context!)
     Thread._currentThread.set(thread)
     if let name = thread.name {
         _CFThreadSetName(pthread_self(), name)
     }
     thread._status = .executing
-    thread.main()
+    thread.main() // 最终还是调用 main
     thread._status = .finished
+    // 这里, 是为了消耗 withRetainedReference 带来的 count + 1
+    // 所以, 在线程的运行时间里面, 是不会 NSThread 消亡的.
     Thread.releaseReference(context!)
     return nil
 }
@@ -54,11 +64,13 @@ private func NSThreadStart(_ context: UnsafeMutableRawPointer?) -> UnsafeMutable
 open class Thread : NSObject {
     
     static internal var _currentThread = NSThreadSpecific<Thread>()
+    
     open class var current: Thread {
         return Thread._currentThread.get() {
             if Thread.isMainThread {
                 return mainThread
             } else {
+                // 新建一个 NSThread, 和当前的线程 ID 挂钩.
                 return Thread(thread: pthread_self())
             }
         }
@@ -136,11 +148,13 @@ open class Thread : NSObject {
         }
     }
     
+    // 这里, 是调用了 pthread_exit,
     open class func exit() {
         Thread.current._status = .finished
         pthread_exit(nil)
     }
     
+    // 同 NSThread 的 target action 不同, 这里主要的运行逻辑, 是在 main 这个闭包里面.
     internal var _main: () -> Void = {}
     private var _thread: _swift_CFThreadRef? = nil
     
@@ -171,31 +185,23 @@ open class Thread : NSObject {
     }
     
     open func start() {
-        precondition(_status == .initialized, "attempting to start a thread that has already been started")
         _status = .starting
         if _cancelled {
             _status = .finished
             return
         }
-        #if CYGWIN
-        if let attr = self._attr {
-            _thread = self.withRetainedReference {
-                return _CFThreadCreate(attr, NSThreadStart, $0)
-            }
-        } else {
-            _thread = nil
-        }
-        #else
         _thread = self.withRetainedReference {
+            // $0 是经过 withRetainedReference 返回的 rawPointer.
+            // withRetainedReference 可以保证, 线程所管理的函数退出之前, NSThread 对象, 不会消亡.
             return _CFThreadCreate(self._attr, NSThreadStart, $0)
         }
-        #endif
     }
     
     open func main() {
         _main()
     }
     
+    // 下面, 大部分都是对于线程相关的数据的包装.
     open var name: String? {
         get {
             return _name
@@ -209,17 +215,6 @@ open class Thread : NSObject {
     
     internal var _name: String? {
         var buf: [Int8] = Array<Int8>(repeating: 0, count: 128)
-        #if DEPLOYMENT_RUNTIME_OBJC
-        // Do not use _CF functions on the ObjC runtime as that breaks on the
-        // Darwin runtime.
-        guard pthread_getname_np(pthread_self(), &buf, buf.count) == 0 else {
-            return ""
-        }
-        #else
-        guard _CFThreadGetName(&buf, Int32(buf.count)) == 0 else {
-            return ""
-        }
-        #endif
         return String(cString: buf)
     }
     

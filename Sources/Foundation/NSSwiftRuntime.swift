@@ -338,6 +338,8 @@ extension NSObject {
         _CFSwiftRelease(value)
     }
 
+    // 可见, 对于一个对象, 进行 Retain, Release 等工作, 不应该使用_CFSwiftRelease, 这种明显的隐藏函数.
+    // 而是使用 Unmanaged 这种具有明显设计意图的类.
     func withRetainedReference<T, R>(_ work: (UnsafePointer<T>) -> R) -> R {
         let selfPtr = Unmanaged.passRetained(self).toOpaque().assumingMemoryBound(to: T.self)
         return work(selfPtr)

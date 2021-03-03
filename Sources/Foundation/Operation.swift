@@ -1,5 +1,6 @@
 import Dispatch
 
+// 这些, 主要是用在 keypath 里面的.
 internal let _NSOperationIsFinished = "isFinished"
 internal let _NSOperationIsFinishedAlternate = "finished"
 internal let _NSOperationIsExecuting = "isExecuting"
@@ -19,19 +20,8 @@ internal let _NSOperationQueueOperationsKeyPath = "operations"
 internal let _NSOperationQueueOperationCountKeyPath = "operationCount"
 internal let _NSOperationQueueSuspendedKeyPath = "suspended"
 
+// 这个类, 就是来指明任务优先级的. 不过, 用更好地方式, 进行了说明.
 extension QualityOfService {
-    #if canImport(Darwin)
-    internal init(_ qos: qos_class_t) {
-        switch qos {
-        case QOS_CLASS_DEFAULT: self = .default
-        case QOS_CLASS_USER_INTERACTIVE: self = .userInteractive
-        case QOS_CLASS_USER_INITIATED: self = .userInitiated
-        case QOS_CLASS_UTILITY: self = .utility
-        case QOS_CLASS_BACKGROUND: self = .background
-        default: fatalError("Unsupported qos")
-        }
-    }
-    #endif
     internal var qosClass: DispatchQoS {
         switch self {
         case .userInteractive: return .userInteractive
@@ -97,6 +87,7 @@ open class Operation : NSObject {
     internal var __nextOperation: Unmanaged<Operation>?
     internal var __nextPriorityOperation: Unmanaged<Operation>?
     internal var __queue: Unmanaged<OperationQueue>?
+    
     internal var __dependencies = [Operation]() // 依赖项.
     internal var __downDependencies = Set<PointerHashedUnmanagedBox<Operation>>()
     internal var __unfinishedDependencyCount: Int = 0
@@ -243,7 +234,7 @@ open class Operation : NSObject {
         }
     }
     
-    internal static func observeValue(forKeyPath keyPath: String, ofObject op: Operation) {
+    internal static func observeValue(forKeyPath keyPath: String, ofObject theOperation: Operation) {
         // 在方法内部定义枚举, 将作用域范围控制了起来.
         enum Transition {
             case toFinished
@@ -261,27 +252,30 @@ open class Operation : NSObject {
         } else {
             kind = nil
         }
+        
         if let transition = kind {
             switch transition {
             case .toFinished: // we only care about NO -> YES
-                if !op.isFinished {
+                if !theOperation.isFinished {
                     return
                 }
                 
                 var ready_deps = [Operation]()
-                op._lock()
-                let state = op._state
-                if op.__queue != nil && state.rawValue < __NSOperationState.starting.rawValue {
-                    print("*** \(type(of: op)) \(Unmanaged.passUnretained(op).toOpaque()) went isFinished=YES without being started by the queue it is in")
+                theOperation._lock()
+                let state = theOperation._state
+                if theOperation.__queue != nil && state.rawValue < __NSOperationState.starting.rawValue {
+                    print("*** \(type(of: theOperation)) \(Unmanaged.passUnretained(theOperation).toOpaque()) went isFinished=YES without being started by the queue it is in")
                 }
                 if state.rawValue < __NSOperationState.finishing.rawValue {
-                    op._state = .finishing
+                    theOperation._state = .finishing
                 } else if state == .finished {
-                    op._unlock()
+                    theOperation._unlock()
                     return
                 }
-                let down_deps = op.__downDependencies
-                op.__downDependencies.removeAll()
+                
+                // 这里, 是查找依赖自己的下游的 operation, 通知他们修改自己的 ready 状态. 然后重新调度.
+                let down_deps = theOperation.__downDependencies
+                theOperation.__downDependencies.removeAll()
                 if 0 < down_deps.count {
                     for down in down_deps {
                         let idown = down.contents.takeUnretainedValue()
@@ -298,10 +292,10 @@ open class Operation : NSObject {
                     }
                 }
                 
-                op._state = .finished
-                let oq = op.__queue
-                op.__queue = nil
-                op._unlock()
+                theOperation._state = .finished
+                let theQueue = theOperation.__queue
+                theOperation.__queue = nil
+                theOperation._unlock()
                 
                 if 0 < ready_deps.count {
                     for down in ready_deps {
@@ -315,32 +309,36 @@ open class Operation : NSObject {
                 }
                 
                 // 当 op Finish 之后, 调用自己的 __waitCondition 的唤醒服务, 使得别的线程因为 wait 的代码重新执行.
-                op.__waitCondition.lock()
-                op.__waitCondition.broadcast()
-                op.__waitCondition.unlock()
-                if let complete = op.__completion {
-                    let held = Unmanaged.passRetained(op)
+                theOperation.__waitCondition.lock()
+                theOperation.__waitCondition.broadcast()
+                theOperation.__waitCondition.unlock()
+                
+                // 在 观察到 Finish 之后, 调用 Completion 方法.
+                // Operation 在 queue 的
+                if let complete = theOperation.__completion {
+                    let held = Unmanaged.passRetained(theOperation)
                     DispatchQueue.global(qos: .default).async {
                         complete()
                         held.release()
                     }
                 }
-                if let queue = oq {
-                    queue.takeUnretainedValue()._operationFinished(op, state)
+                // 注销自己的 queue 里面.
+                if let queue = theQueue {
+                    queue.takeUnretainedValue()._operationFinished(theOperation, state)
                     queue.release()
                 }
             case .toExecuting:
-                let isExecuting = op.isExecuting
-                op._lock()
-                if op._state.rawValue < __NSOperationState.executing.rawValue && isExecuting {
-                    op._state = .executing
+                let isExecuting = theOperation.isExecuting
+                theOperation._lock()
+                if theOperation._state.rawValue < __NSOperationState.executing.rawValue && isExecuting {
+                    theOperation._state = .executing
                 }
-                op._unlock()
+                theOperation._unlock()
             case .toReady:
                 // 当, operation 处于 ready 状态了. 就调动它的 queue 的调度算法.
-                let r = op.isReady
-                op._cachedIsReady = r
-                let q = op._queue
+                let r = theOperation.isReady
+                theOperation._cachedIsReady = r
+                let q = theOperation._queue
                 if r {
                     q?._schedule()
                 }
@@ -432,32 +430,32 @@ open class Operation : NSObject {
     }
     
     // 这样写, 就不用写捕获列表了????
-    internal func _addDependency(_ op: Operation) {
+    internal func _addDependency(_ beenDepended: Operation) {
         withExtendedLifetime(self) {
-            withExtendedLifetime(op) {
+            withExtendedLifetime(beenDepended) {
                 
-                var up: Operation?
+                var addedDepend: Operation?
                 
                 _lock()
                 // 如果, 之前依赖里面没有, 那么才把参数添加到 __dependencies 中去.
-                if __dependencies.first(where: { $0 === op }) == nil {
-                    __dependencies.append(op)
-                    up = op
+                if __dependencies.first(where: { $0 === beenDepended }) == nil {
+                    __dependencies.append(beenDepended)
+                    addedDepend = beenDepended
                 }
                 _unlock()
                 
-                if let upwards = up {
+                if let addedOp = addedDepend {
                     // 锁的顺序要注意栈式顺序.
-                    upwards._lock()
+                    addedOp._lock()
                     _lock()
-                    let upIsFinished = upwards._state == __NSOperationState.finished
+                    let upIsFinished = addedOp._state == __NSOperationState.finished
                     if !upIsFinished && !_isCancelled {
                         assert(_unfinishedDependencyCount >= 0)
                         _incrementUnfinishedDependencyCount()
-                        upwards._addParent(self)
+                        addedOp._addParent(self)
                     }
                     _unlock()
-                    upwards._unlock()
+                    addedOp._unlock()
                 }
                 Operation.observeValue(forKeyPath: _NSOperationIsReady, ofObject: self)
             }
@@ -641,7 +639,6 @@ open class Operation : NSObject {
 
 extension Operation {
     public func willChangeValue(forKey key: String) {
-        // do nothing
     }
     
     public func didChangeValue(forKey key: String) {
@@ -649,11 +646,11 @@ extension Operation {
     }
     
     public func willChangeValue<Value>(for keyPath: KeyPath<Operation, Value>) {
-        // do nothing
     }
     
     public func didChangeValue<Value>(for keyPath: KeyPath<Operation, Value>) {
         switch keyPath {
+        // 这里, \ 这样就可以转换会字符串????
         case \Operation.isFinished: didChangeValue(forKey: _NSOperationIsFinished)
         case \Operation.isReady: didChangeValue(forKey: _NSOperationIsReady)
         case \Operation.isCancelled: didChangeValue(forKey: _NSOperationIsCancelled)
@@ -920,17 +917,18 @@ open class OperationQueue : NSObject, ProgressReporting {
         }
     }
     
-    internal func _operationFinished(_ op: Operation, _ previousState: Operation.__NSOperationState) {
+    internal func _operationFinished(_ finishedOperation: Operation, _ previousState: Operation.__NSOperationState) {
         // There are only three cases where an operation might have a nil queue
         // A) The operation was never added to a queue and we got here by a normal KVO change
         // B) The operation was somehow already finished
         // C) the operation was attempted to be added to a queue but an exception occured and was ignored...
         // Option C is NOT supported!
-        let isBarrier = op is _BarrierOperation
+        let isBarrier = finishedOperation is _BarrierOperation
+        
         _lock()
-        let nextOp = op.__nextOperation
-        if Operation.__NSOperationState.finished == op._state {
-            let prevOp = op.__previousOperation
+        let nextOp = finishedOperation.__nextOperation
+        if Operation.__NSOperationState.finished == finishedOperation._state {
+            let prevOp = finishedOperation.__previousOperation
             if let prev = prevOp {
                 prev.takeUnretainedValue().__nextOperation = nextOp
             } else {
@@ -946,9 +944,9 @@ open class OperationQueue : NSObject, ProgressReporting {
             if previousState.rawValue >= Operation.__NSOperationState.dispatching.rawValue {
                 _decrementExecutingOperations()
             }
-            op.__previousOperation = nil
-            op.__nextOperation = nil
-            op._invalidateQueue()
+            finishedOperation.__previousOperation = nil
+            finishedOperation.__nextOperation = nil
+            finishedOperation._invalidateQueue()
         }
         if !isBarrier {
             _decrementOperationCount()
@@ -958,7 +956,8 @@ open class OperationQueue : NSObject, ProgressReporting {
         _schedule()
         
         if previousState.rawValue >= Operation.__NSOperationState.enqueuing.rawValue {
-            Unmanaged.passUnretained(op).release()
+            // 在这里, 对 Operation 进行了 release 的操作.
+            Unmanaged.passUnretained(finishedOperation).release()
         }
     }
     
@@ -1001,7 +1000,7 @@ open class OperationQueue : NSObject, ProgressReporting {
     
     static internal var _currentQueue = NSThreadSpecific<OperationQueue>()
     
-    // 从 GCD 里面调度, GCD 里面封装的任务, 调用 _schedule(_ op: Operation)
+    // 这里单个任务的 GCD 里面的包装体
     internal func _schedule(_ op: Operation) {
         op._state = .starting
         // set current tsd
@@ -1019,18 +1018,22 @@ open class OperationQueue : NSObject, ProgressReporting {
         }
     }
     
+    // 相比较于, NSFoundation 的简单地 ready, stash 两个队列, 这里有各个优先级的队列的控制.
+    // 并且, 自己主动维护了一个链表, 使得这个类异常复杂.
     internal func _schedule() {
         var retestOps = [Operation]()
         _lock()
         var slotsAvail = __actualMaxNumOps - __numExecOps
+        // 各个优先级的队列, 都来一次.
         for prio in Operation.QueuePriority.priorities {
             if 0 >= slotsAvail || _suspended {
                 break
             }
-            var op = _firstPriorityOperation(prio)
+            var currentOpertion = _firstPriorityOperation(prio)
             var prev: Unmanaged<Operation>?
             
-            while let operation = op?.takeUnretainedValue() {
+            // 每次提交一个任务, 都会更新 slotsAvail 的值, 所以, 还是先提交高优先级的任务, 只有高优先级的任务完成了, 才执行低优先级的任务.
+            while let operation = currentOpertion?.takeUnretainedValue() {
                 if 0 >= slotsAvail || _suspended {
                     break
                 }
@@ -1070,13 +1073,13 @@ open class OperationQueue : NSObject, ProgressReporting {
                         }
                     }
                     
-                    op = next
+                    currentOpertion = next
                 } else {
                     if retest {
                         retestOps.append(operation)
                     }
-                    prev = op
-                    op = next
+                    prev = currentOpertion
+                    currentOpertion = next
                 }
             }
         }

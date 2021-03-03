@@ -1,6 +1,7 @@
 
 @_implementationOnly import CoreFoundation
 
+// NF 平台的启动函数, 这里是将 Timer 传递进来了, 调用它的 fire.
 internal func __NSFireTimer(_ timer: CFRunLoopTimer?, info: UnsafeMutableRawPointer?) -> Void {
     let t: Timer = NSObject.unretainedReference(info!)
     t._fire(t)
@@ -18,8 +19,11 @@ open class Timer : NSObject {
     }
     
     internal var _timerStorage: AnyObject?
-    internal var _timer: CFRunLoopTimer? { unsafeBitCast(_timerStorage, to: CFRunLoopTimer?.self) } // has to be optional because this is a chicken/egg problem with initialization in swift
-    internal var _fire: (Timer) -> Void = { (_: Timer) in }
+    internal var _timer: CFRunLoopTimer? {
+        unsafeBitCast(_timerStorage, to: CFRunLoopTimer?.self)
+    }
+    // 同样的, 没有了 target action, 而是闭包代替了真正的执行逻辑.
+    internal var _fire: (Timer) -> Void = { (_: Timer) in } // 有默认值居然.
     
     public init(fire date: Date,
                 interval: TimeInterval,
@@ -27,11 +31,14 @@ open class Timer : NSObject {
                 block: @escaping (Timer) -> Swift.Void) {
         super.init()
         _fire = block
+        
         var context = CFRunLoopTimerContext()
         withRetainedReference {
             (refPtr: UnsafeMutablePointer<UInt8>) in
             context.info = UnsafeMutableRawPointer(refPtr)
         }
+        
+        // 使用了很复杂的 CF 平台的技术.
         let timer = withUnsafeMutablePointer(to: &context) { (ctx: UnsafeMutablePointer<CFRunLoopTimerContext>) -> CFRunLoopTimer in
             var t = interval
             if !repeats {
@@ -53,10 +60,7 @@ open class Timer : NSObject {
         self.init(fire: Date(), interval: interval, repeats: repeats, block: block)
     }
     
-    /// Alternative API for timer creation with a block.
-    /// - Experiment: This is a draft API currently under consideration for official import into Foundation as a suitable alternative to creation via selector
-    /// - Note: Since this API is under consideration it may be either removed or revised in the near future
-    /// - Warning: Capturing the timer or the owner of the timer inside of the block may cause retain cycles. Use with caution
+   // 这种很方便的 API, 都是在内部, 创建对象, 操作对象.
     open class func scheduledTimer(withTimeInterval interval: TimeInterval, repeats: Bool, block: @escaping (Timer) -> Void) -> Timer {
         let timer = Timer(fire: Date(timeIntervalSinceNow: interval), interval: interval, repeats: repeats, block: block)
         CFRunLoopAddTimer(CFRunLoopGetCurrent(), timer._timer!, kCFRunLoopDefaultMode)
