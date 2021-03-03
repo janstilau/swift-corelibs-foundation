@@ -64,6 +64,7 @@ open class Operation : NSObject {
         case finished = 0xF4
     }
     
+    // 数据部分.
     internal var __previousOperation: Unmanaged<Operation>?
     internal var __nextOperation: Unmanaged<Operation>?
     internal var __nextPriorityOperation: Unmanaged<Operation>?
@@ -551,7 +552,6 @@ open class Operation : NSObject {
         }
     }
     
-    
     open var completionBlock: (() -> Void)? {
         get {
             _lock()
@@ -998,6 +998,7 @@ open class OperationQueue : NSObject, ProgressReporting {
                         queue = __dispatch_queue ?? _synthesizeBackingQueue()
                     }
                     
+                    // 最终, 还是用到了 gcd 的方法.
                     if let schedule = operation.__schedule {
                         if operation is _BarrierOperation {
                             queue.async(flags: .barrier, execute: {

@@ -745,6 +745,7 @@
 /* Begin PBXFileReference section */
 		0383A1741D2E558A0052E5D1 /* TestStream.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = TestStream.swift; sourceTree = "<group>"; };
 		03B6F5831F15F339004F25AF /* TestURLProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestURLProtocol.swift; sourceTree = "<group>"; };
+		067E572625EF439400EBFD8F /* GCD.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GCD.h; sourceTree = "<group>"; };
 		1513A8422044893F00539722 /* FileManager+XDG.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FileManager+XDG.swift"; sourceTree = "<group>"; };
 		1520469A1D8AEABE00D02E36 /* HTTPServer.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HTTPServer.swift; sourceTree = "<group>"; };
 		152EF3932283457B001E1269 /* TestNSSortDescriptor.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = TestNSSortDescriptor.swift; sourceTree = "<group>"; };
@@ -2180,6 +2181,7 @@
 				5BCCA8D81CE6697F0059B963 /* URLComponents.swift */,
 				EADE0B871BD15DFF00C49C64 /* UserDefaults.swift */,
 				6EB768271D18C12C00D4B719 /* UUID.swift */,
+				067E572625EF439400EBFD8F /* GCD.h */,
 			);
 			path = Foundation;
 			sourceTree = "<group>";
