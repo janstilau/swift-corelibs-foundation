@@ -30,18 +30,18 @@ private func _standardizedPath(_ path: String) -> String {
     if !path.isAbsolutePath {
         return path._nsObject.standardizingPath
     }
-#if os(Windows)
+    #if os(Windows)
     return path.unixPath
-#else
+    #else
     return path
-#endif
+    #endif
 }
 
 internal func _pathComponents(_ path: String?) -> [String]? {
     guard let p = path else {
         return nil
     }
-
+    
     var result = [String]()
     if p.length == 0 {
         return result
@@ -52,7 +52,7 @@ internal func _pathComponents(_ path: String?) -> [String]? {
         if characterView[curPos] == "/" {
             result.append("/")
         }
-
+        
         while curPos < endPos {
             while curPos < endPos && characterView[curPos] == "/" {
                 curPos = characterView.index(after: curPos)
@@ -277,7 +277,7 @@ open class NSURL : NSObject, NSSecureCoding, NSCopying {
             return self.absoluteString
         }
     }
-
+    
     deinit {
         _CFDeinit(self)
     }
@@ -307,11 +307,11 @@ open class NSURL : NSObject, NSSecureCoding, NSCopying {
         }
         let base = aDecoder.decodeObject(of: NSURL.self, forKey:"NS.base")?._swiftObject
         let relative = aDecoder.decodeObject(of: NSString.self, forKey:"NS.relative")
-
+        
         if relative == nil {
             return nil
         }
-
+        
         self.init(string: String._unconditionallyBridgeFromObjectiveC(relative!), relativeTo: base)
     }
     
@@ -351,17 +351,17 @@ open class NSURL : NSObject, NSSecureCoding, NSCopying {
             
             let _ = FileManager.default.fileExists(atPath: absolutePath, isDirectory: &isDir)
         }
-
+        
         self.init(fileURLWithPath: thePath, isDirectory: isDir.boolValue, relativeTo: baseURL)
     }
-
+    
     public convenience init(fileURLWithPath path: String, isDirectory isDir: Bool) {
         self.init(fileURLWithPath: path, isDirectory: isDir, relativeTo: nil)
     }
-
+    
     public init(fileURLWithPath path: String) {
         let thePath: String = _standardizedPath(path)
-
+        
         var isDir: ObjCBool = false
         if validPathSeps.contains(where: { thePath.hasSuffix(String($0)) }) {
             isDir = true
@@ -375,7 +375,7 @@ open class NSURL : NSObject, NSSecureCoding, NSCopying {
     }
     
     public convenience init(fileURLWithFileSystemRepresentation path: UnsafePointer<Int8>, isDirectory isDir: Bool, relativeTo baseURL: URL?) {
-
+        
         let pathString = String(cString: path)
         self.init(fileURLWithPath: pathString, isDirectory: isDir, relativeTo: baseURL)
     }
@@ -423,7 +423,7 @@ open class NSURL : NSObject, NSSecureCoding, NSCopying {
     }
     
     /* Returns the data representation of the URL's relativeString. If the URL was initialized with -initWithData:relativeTo:, the data representation returned are the same bytes as those used at initialization; otherwise, the data representation returned are the bytes of the relativeString encoded with NSUTF8StringEncoding.
-    */
+     */
     open var dataRepresentation: Data {
         let bytesNeeded = CFURLGetBytes(_cfObject, nil, 0)
         assert(bytesNeeded > 0)
@@ -441,7 +441,7 @@ open class NSURL : NSObject, NSSecureCoding, NSCopying {
         if let absURL = CFURLCopyAbsoluteURL(_cfObject) {
             return CFURLGetString(absURL)._swiftObject
         }
-
+        
         return CFURLGetString(_cfObject)._swiftObject
     }
     
@@ -460,7 +460,7 @@ open class NSURL : NSObject, NSSecureCoding, NSCopying {
     }
     
     /* Any URL is composed of these two basic pieces.  The full URL would be the concatenation of [myURL scheme], ':', [myURL resourceSpecifier]
-    */
+     */
     open var scheme: String? {
         return CFURLCopyScheme(_cfObject)?._swiftObject
     }
@@ -500,7 +500,7 @@ open class NSURL : NSObject, NSSecureCoding, NSCopying {
     }
     
     /* If the URL conforms to rfc 1808 (the most common form of URL), the following accessors will return the various components; otherwise they return nil.  The litmus test for conformance is as recommended in RFC 1808 - whether the first two characters of resourceSpecifier is @"//".  In all cases, they return the component's value after resolving the receiver against its base URL.
-    */
+     */
     open var host: String? {
         return CFURLCopyHostName(_cfObject)?._swiftObject
     }
@@ -531,7 +531,7 @@ open class NSURL : NSObject, NSSecureCoding, NSCopying {
             initializedCount = CFURLGetBytes(absoluteURL, buffer.baseAddress, buffer.count)
             precondition(initializedCount == bufSize, "Inconsistency in CFURLGetBytes")
         }
-
+        
         let passwordBuf = buf[passwordRange.location ..< passwordRange.location+passwordRange.length]
         return passwordBuf.withUnsafeBufferPointer { ptr in
             NSString(bytes: ptr.baseAddress!, length: passwordBuf.count, encoding: String.Encoding.utf8.rawValue)?._swiftObject
@@ -543,7 +543,7 @@ open class NSURL : NSObject, NSSecureCoding, NSCopying {
         guard var url = CFURLCopyFileSystemPath(absURL, kCFURLPOSIXPathStyle)?._swiftObject else {
             return nil
         }
-#if os(Windows)
+        #if os(Windows)
         // Per RFC 8089:E.2, if we have an absolute Windows/DOS path we can
         // begin the URL with a drive letter rather than a `/`
         let scalars = Array(url.unicodeScalars)
@@ -551,7 +551,7 @@ open class NSURL : NSObject, NSSecureCoding, NSCopying {
            scalars.count >= 3, scalars[0] == "/", scalars[2] == ":" {
             url.removeFirst()
         }
-#endif
+        #endif
         return url
     }
     
@@ -573,7 +573,7 @@ open class NSURL : NSObject, NSSecureCoding, NSCopying {
         guard var url = CFURLCopyFileSystemPath(_cfObject, kCFURLPOSIXPathStyle)?._swiftObject else {
             return nil
         }
-#if os(Windows)
+        #if os(Windows)
         // Per RFC 8089:E.2, if we have an absolute Windows/DOS path we can
         // begin the URL with a drive letter rather than a `/`
         let scalars = Array(url.unicodeScalars)
@@ -581,70 +581,70 @@ open class NSURL : NSObject, NSSecureCoding, NSCopying {
            scalars.count >= 3, scalars[0] == "/", scalars[2] == ":" {
             url.removeFirst()
         }
-#endif
+        #endif
         return url
     }
     
     /* Determines if a given URL string's path represents a directory (i.e. the path component in the URL string ends with a '/' character). This does not check the resource the URL refers to.
-    */
+     */
     open var hasDirectoryPath: Bool {
         return CFURLHasDirectoryPath(_cfObject)
     }
     
     /* Returns the URL's path in file system representation. File system representation is a null-terminated C string with canonical UTF-8 encoding.
-    */
+     */
     open func getFileSystemRepresentation(_ buffer: UnsafeMutablePointer<Int8>, maxLength maxBufferLength: Int) -> Bool {
         return buffer.withMemoryRebound(to: UInt8.self, capacity: maxBufferLength) {
             CFURLGetFileSystemRepresentation(_cfObject, true, $0, maxBufferLength)
         }
     }
-
-#if os(Windows)
+    
+    #if os(Windows)
     internal func _getWideFileSystemRepresentation(_ buffer: UnsafeMutablePointer<UInt16>, maxLength: Int) -> Bool {
-      _CFURLGetWideFileSystemRepresentation(_cfObject, true, buffer, maxLength)
+        _CFURLGetWideFileSystemRepresentation(_cfObject, true, buffer, maxLength)
     }
-#endif
-
+    #endif
+    
     /* Returns the URL's path in file system representation. File system representation is a null-terminated C string with canonical UTF-8 encoding. The returned C string will be automatically freed just as a returned object would be released; your code should copy the representation or use getFileSystemRepresentation:maxLength: if it needs to store the representation outside of the autorelease context in which the representation is created.
-    */
+     */
     
     // Memory leak. See https://github.com/apple/swift-corelibs-foundation/blob/master/Docs/Issues.md
     open var fileSystemRepresentation: UnsafePointer<Int8> {
-
-#if os(Windows)
+        
+        #if os(Windows)
         let bufSize = Int(MAX_PATH + 1)
-#else
+        #else
         let bufSize = Int(PATH_MAX + 1)
-#endif
-
+        #endif
+        
         let _fsrBuffer = UnsafeMutablePointer<Int8>.allocate(capacity: bufSize)
         _fsrBuffer.initialize(repeating: 0, count: bufSize)
-
+        
         if getFileSystemRepresentation(_fsrBuffer, maxLength: bufSize) {
             return UnsafePointer(_fsrBuffer)
         }
-
+        
         // FIXME: This used to return nil, but the corresponding Darwin
         // implementation is marked as non-nullable.
         fatalError("URL cannot be expressed in the filesystem representation;" +
-                   "use getFileSystemRepresentation to handle this case")
+                    "use getFileSystemRepresentation to handle this case")
     }
-
-#if os(Windows)
+    
+    #if os(Windows)
     internal var _wideFileSystemRepresentation: UnsafePointer<UInt16> {
-      let capacity: Int = Int(MAX_PATH) + 1
-      let buffer: UnsafeMutablePointer<UInt16> =
-          UnsafeMutablePointer<UInt16>.allocate(capacity: capacity)
-      buffer.initialize(repeating: 0, count: capacity)
-
-      if _getWideFileSystemRepresentation(buffer, maxLength: capacity) {
-        return UnsafePointer(buffer)
-      }
-
-      fatalError("URL cannot be expressed in the filesystem representation; use getFileSystemRepresentation to handle this case")
+        let capacity: Int = Int(MAX_PATH) + 1
+        let buffer: UnsafeMutablePointer<UInt16> =
+            UnsafeMutablePointer<UInt16>.allocate(capacity: capacity)
+        buffer.initialize(repeating: 0, count: capacity)
+        
+        if _getWideFileSystemRepresentation(buffer, maxLength: capacity) {
+            return UnsafePointer(buffer)
+        }
+        
+        fatalError("URL cannot be expressed in the filesystem representation; use getFileSystemRepresentation to handle this case")
     }
-#endif
-
+    #endif
+    
     // Whether the scheme is file:; if myURL.isFileURL is true, then myURL.path is suitable for input into FileManager or NSPathUtilities.
     open var isFileURL: Bool {
         return _CFURLIsFileURL(_cfObject)
@@ -655,33 +655,33 @@ open class NSURL : NSObject, NSSecureCoding, NSCopying {
         guard path != nil else {
             return nil
         }
-
+        
         guard let components = NSURLComponents(string: relativeString), let componentPath = components.path else {
             return nil
         }
-
+        
         if componentPath.contains("..") || componentPath.contains(".") {
             components.path = _pathByRemovingDots(pathComponents!)
         }
-
+        
         if let filePath = components.path, isFileURL {
             return URL(fileURLWithPath: filePath, isDirectory: hasDirectoryPath, relativeTo: baseURL)
         }
-
+        
         return components.url(relativeTo: baseURL)
     }
     
     /* Returns whether the URL's resource exists and is reachable. This method synchronously checks if the resource's backing store is reachable. Checking reachability is appropriate when making decisions that do not require other immediate operations on the resource, e.g. periodic maintenance of UI state that depends on the existence of a specific document. When performing operations such as opening a file or copying resource properties, it is more efficient to simply try the operation and handle failures. If this method returns NO, the optional error is populated. This method is currently applicable only to URLs for file system resources. For other URL types, NO is returned. Symbol is present in iOS 4, but performs no operation.
-    */
+     */
     /// - Experiment: This is a draft API currently under consideration for official import into Foundation as a suitable alternative
     /// - Note: Since this API is under consideration it may be either removed or revised in the near future
     // TODO: should be `checkResourceIsReachableAndReturnError` with autoreleased error parameter.
     // Currently Autoreleased pointers is not supported on Linux.
     open func checkResourceIsReachable() throws -> Bool {
         guard isFileURL,
-            let path = path else {
-                throw NSError(domain: NSCocoaErrorDomain,
-                              code: CocoaError.Code.fileReadUnsupportedScheme.rawValue)
+              let path = path else {
+            throw NSError(domain: NSCocoaErrorDomain,
+                          code: CocoaError.Code.fileReadUnsupportedScheme.rawValue)
         }
         
         guard FileManager.default.fileExists(atPath: path) else {
@@ -694,21 +694,21 @@ open class NSURL : NSObject, NSSecureCoding, NSCopying {
         
         return true
     }
-
+    
     /* Returns a file path URL that refers to the same resource as a specified URL. File path URLs use a file system style path. An error will occur if the url parameter is not a file URL. A file reference URL's resource must exist and be reachable to be converted to a file path URL. Symbol is present in iOS 4, but performs no operation.
-    */
+     */
     open var filePathURL: URL? {
         guard isFileURL else {
             return nil
         }
-
+        
         return URL(string: absoluteString)
     }
     
     internal override var _cfTypeID: CFTypeID {
         return CFURLGetTypeID()
     }
-
+    
     open func removeAllCachedResourceValues() {
         _resourceStorage?.removeAllCachedResourceValues()
     }
@@ -898,7 +898,7 @@ extension NSString {
 extension NSURL {
     
     /* The following methods work on the path portion of a URL in the same manner that the NSPathUtilities methods on NSString do.
-    */
+     */
     open class func fileURL(withPathComponents components: [String]) -> URL? {
         let path = NSString.path(withComponents: components)
         if components.last == "/" {
@@ -912,17 +912,17 @@ extension NSURL {
         guard let p = path else {
             return nil
         }
-
+        
         if p == "/" {
             return p
         }
-
+        
         var result = p
         if compress {
             let startPos = result.startIndex
             var endPos = result.endIndex
             var curPos = startPos
-
+            
             while curPos < endPos {
                 if result[curPos] == "/" {
                     var afterLastSlashPos = curPos
@@ -944,7 +944,7 @@ extension NSURL {
         }
         return result
     }
-
+    
     open var pathComponents: [String]? {
         return _pathComponents(path)
     }
@@ -986,7 +986,7 @@ extension NSURL {
                     result = self.appendingPathComponent(pathComponent, isDirectory: true)
                 }
             }
-    
+            
         }
         return result
     }
@@ -1008,7 +1008,7 @@ extension NSURL {
     }
     
     /* The following methods work only on `file:` scheme URLs; for non-`file:` scheme URLs, these methods return the URL unchanged.
-    */
+     */
     open var standardizingPath: URL? {
         // Documentation says it should expand initial tilde, but it does't do this on OS X.
         // In remaining cases it works just like URLByResolvingSymlinksInPath.
@@ -1023,11 +1023,11 @@ extension NSURL {
         guard isFileURL else {
             return URL(string: absoluteString)
         }
-
+        
         guard let selfPath = path else {
             return URL(string: absoluteString)
         }
-
+        
         let absolutePath: String
         if selfPath.isAbsolutePath {
             absolutePath = selfPath
@@ -1035,23 +1035,23 @@ extension NSURL {
             let workingDir = FileManager.default.currentDirectoryPath
             absolutePath = workingDir._bridgeToObjectiveC().appendingPathComponent(selfPath)
         }
-
+        
         
         var components = URL(fileURLWithPath: absolutePath).pathComponents
         guard !components.isEmpty else {
             return URL(string: absoluteString)
         }
-
+        
         var resolvedPath = components.removeFirst()
         for component in components {
             switch component {
-
+            
             case "", ".":
                 break
-
+                
             case "..":
                 resolvedPath = resolvedPath._bridgeToObjectiveC().deletingLastPathComponent
-
+                
             default:
                 resolvedPath = resolvedPath._bridgeToObjectiveC().appendingPathComponent(component)
                 if let destination = FileManager.default._tryToResolveTrailingSymlinkInPath(resolvedPath) {
@@ -1059,55 +1059,55 @@ extension NSURL {
                 }
             }
         }
-
+        
         // It might be a responsibility of NSURL(fileURLWithPath:). Check it.
         var isExistingDirectory: ObjCBool = false
         let _ = FileManager.default.fileExists(atPath: resolvedPath, isDirectory: &isExistingDirectory)
-
+        
         if excludeSystemDirs {
             resolvedPath = resolvedPath._tryToRemovePathPrefix("/private") ?? resolvedPath
         }
-
+        
         if isExistingDirectory.boolValue && !resolvedPath.hasSuffix("/") {
             resolvedPath += "/"
         }
-
+        
         if preserveDirectoryFlag {
             return URL(fileURLWithPath: resolvedPath, isDirectory: self.hasDirectoryPath)
         } else {
             return URL(fileURLWithPath: resolvedPath)
         }
     }
-
+    
     fileprivate func _pathByRemovingDots(_ comps: [String]) -> String {
         var components = comps
         
         if(components.last == "/") {
             components.removeLast()
         }
-
+        
         guard !components.isEmpty else {
             return self.path!
         }
-
+        
         let isAbsolutePath = components.first == "/"
         var result : String = components.removeFirst()
-
+        
         for component in components {
             switch component {
-                case ".":
-                    break
-                case ".." where isAbsolutePath:
-                    result = result._bridgeToObjectiveC().deletingLastPathComponent
-                default:
-                    result = result._bridgeToObjectiveC().appendingPathComponent(component)
+            case ".":
+                break
+            case ".." where isAbsolutePath:
+                result = result._bridgeToObjectiveC().deletingLastPathComponent
+            default:
+                result = result._bridgeToObjectiveC().appendingPathComponent(component)
             }
         }
-
+        
         if(self.path!.hasSuffix("/")) {
             result += "/"
         }
-
+        
         return result
     }
 }
@@ -1155,7 +1155,7 @@ open class NSURLQueryItem : NSObject, NSSecureCoding, NSCopying {
     open override func isEqual(_ object: Any?) -> Bool {
         guard let other = object as? NSURLQueryItem else { return false }
         return other === self
-                || (other.name == self.name
+            || (other.name == self.name
                     && other.value == self.value)
     }
     
@@ -1170,20 +1170,20 @@ open class NSURLComponents: NSObject, NSCopying {
     open override func copy() -> Any {
         return copy(with: nil)
     }
-
+    
     open override func isEqual(_ object: Any?) -> Bool {
         guard let other = object as? NSURLComponents else { return false }
         return self === other
             || (scheme == other.scheme
-                && user == other.user
-                && password == other.password
-                && host == other.host
-                && port == other.port
-                && path == other.path
-                && query == other.query
-                && fragment == other.fragment)
+                    && user == other.user
+                    && password == other.password
+                    && host == other.host
+                    && port == other.port
+                    && path == other.path
+                    && query == other.query
+                    && fragment == other.fragment)
     }
-
+    
     open override var hash: Int {
         var hasher = Hasher()
         hasher.combine(scheme)
@@ -1196,7 +1196,7 @@ open class NSURLComponents: NSObject, NSCopying {
         hasher.combine(fragment)
         return hasher.finalize()
     }
-
+    
     open func copy(with zone: NSZone? = nil) -> Any {
         let copy = NSURLComponents()
         copy.scheme = self.scheme
@@ -1418,7 +1418,7 @@ open class NSURLComponents: NSObject, NSCopying {
     
     
     /* These properties return the character range of a component in the URL string returned by -[NSURLComponents string]. If the component does not exist in the NSURLComponents object, {NSNotFound, 0} is returned. Note: Zero length components are legal. For example, the URL string "scheme://:@/?#" has a zero length user, password, host, query and fragment; the URL strings "scheme:" and "" both have a zero length path.
-    */
+     */
     open var rangeOfScheme: NSRange {
         return NSRange(_CFURLComponentsGetRangeOfScheme(_components))
     }
@@ -1460,7 +1460,7 @@ open class NSURLComponents: NSObject, NSCopying {
             guard let queryArray = _CFURLComponentsCopyQueryItems(_components) else {
                 return nil
             }
-
+            
             let count = CFArrayGetCount(queryArray)
             return (0..<count).map { idx in
                 let oneEntry = unsafeBitCast(CFArrayGetValueAtIndex(queryArray, idx), to: NSDictionary.self)
@@ -1475,7 +1475,7 @@ open class NSURLComponents: NSObject, NSCopying {
                 self.percentEncodedQuery = nil
                 return
             }
-
+            
             // The CFURL implementation requires two CFArrays, one for names and one for values
             var names = [CFTypeRef]()
             var values = [CFTypeRef]()
@@ -1847,10 +1847,10 @@ fileprivate extension URLResourceValuesStorage {
                 result[key] = try attribute(.size)
             case .totalFileAllocatedSizeKey: fallthrough // FIXME: This should add the size of any metadata.
             case .fileAllocatedSizeKey:
-#if !os(Windows)
+                #if !os(Windows)
                 let stat = try urlStat()
                 result[key] = Int(stat.st_blocks) * Int(stat.st_blksize)
-#endif
+                #endif
             case .isAliasFileKey:
                 // swift-corelibs-foundation does not support aliases and bookmarks.
                 break
@@ -1863,7 +1863,7 @@ fileprivate extension URLResourceValuesStorage {
                 result[key] = try volumeAttribute(.systemFreeSize)
             case .volumeResourceCountKey:
                 result[key] = try volumeAttribute(.systemFileNumber)
-
+                
             // FIXME: swift-corelibs-foundation does not currently support querying this kind of filesystem information. We return reasonable assumptions for now, with the understanding that by noting support we are encouraging the application to try performing corresponding I/O operations (and handle those errors, which they already must) instead. Where those keys would inform I/O decisions that are not single operations, we assume conservatively.
             case .volumeSupportsPersistentIDsKey:
                 result[key] = false
@@ -2004,15 +2004,15 @@ fileprivate extension URLResourceValuesStorage {
                     
                     succeeded = false
                 }
-
+                
                 switch key {
-                    
+                
                 case .isUserImmutableKey:
                     try prepareToSetFileAttribute(._userImmutable, value: value as? Bool)
-
+                    
                 case .isSystemImmutableKey:
                     try prepareToSetFileAttribute(._systemImmutable, value: value as? Bool)
-
+                    
                 case .hasHiddenExtensionKey:
                     try prepareToSetFileAttribute(.extensionHidden, value: value as? Bool)
                     
