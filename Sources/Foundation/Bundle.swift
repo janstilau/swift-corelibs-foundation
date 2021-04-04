@@ -93,12 +93,6 @@ open class Bundle: NSObject {
         self.init(path: url.path)
     }
     
-    #if os(Windows)
-    @available(Windows, deprecated, message: "Not yet implemented.")
-    public init(for aClass: AnyClass) {
-        NSUnimplemented()
-    }
-    #else
     public init(for aClass: AnyClass) {
         let pointerInImageOfClass = _getTypeContextDescriptor(of: aClass)
         guard let imagePath = _CFBundleCopyLoadedImagePathForAddress(pointerInImageOfClass)?._swiftObject else {
@@ -124,7 +118,6 @@ open class Bundle: NSObject {
         let bundle = _CFBundleCreateWithExecutableURLIfMightBeBundle(kCFAllocatorSystemDefault, url._cfObject)?.takeRetainedValue()
         _bundleStorage = bundle ?? CFBundleGetMainBundle()
     }
-    #endif
     
     public init?(identifier: String) {
         super.init()

@@ -13,16 +13,17 @@ internal final class _MutableHandle<MutableType : NSObject> where MutableType : 
     
     @usableFromInline internal var _pointer : MutableType
     
+    // 初始化方法, 会将原值进行一次 copy.
     init(reference : MutableType) {
         _pointer = reference.copy() as! MutableType
     }
     
+    // 初始化方法, 直接使用原值.
     init(adoptingReference reference: MutableType) {
         _pointer = reference
     }
     
-    /// Apply a closure to the reference type.
-    // Swift 的方法, 太难看了. 一点也不 clean.
+    // 因为 _pointer 是内部值, 所以提供一个方法, 操作这个内部值.
     func map<ReturnType>(_ whatToDo : (MutableType) throws -> ReturnType) rethrows -> ReturnType {
         return try whatToDo(_pointer)
     }

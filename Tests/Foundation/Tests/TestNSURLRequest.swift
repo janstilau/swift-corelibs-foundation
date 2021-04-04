@@ -1,14 +1,6 @@
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See http://swift.org/LICENSE.txt for license information
-// See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-
 class TestNSURLRequest : XCTestCase {
     
+    // 这是 Swift 里面, 创建 testCase 的方法, 将成员函数指针, 和对应的 key 值组成一个元组, 装到数组里面去.
     static var allTests: [(String, (TestNSURLRequest) -> () throws -> Void)] {
         return [
             ("test_construction", test_construction),
@@ -31,11 +23,10 @@ class TestNSURLRequest : XCTestCase {
     
     func test_construction() {
         let request = NSURLRequest(url: url)
-        // Match macOS Foundation responses
-        XCTAssertEqual(request.url, url)
-        XCTAssertEqual(request.httpMethod, "GET")
-        XCTAssertNil(request.allHTTPHeaderFields)
-        XCTAssertNil(request.mainDocumentURL)
+        XCTAssertEqual(request.url, url) // 测试 url 的值
+        XCTAssertEqual(request.httpMethod, "GET") // 测试默认是 Get 方法.
+        XCTAssertNil(request.allHTTPHeaderFields) // 测试默认没有 headerFields
+        XCTAssertNil(request.mainDocumentURL) // 测试默认没有 mainDocumentURL
     }
     
     func test_mutableConstruction() {
@@ -49,14 +40,14 @@ class TestNSURLRequest : XCTestCase {
         XCTAssertNil(request.mainDocumentURL)
         
         request.mainDocumentURL = url
-        XCTAssertEqual(request.mainDocumentURL, url)
+        XCTAssertEqual(request.mainDocumentURL, url) // 测试 setDoc 方法,
         
         request.httpMethod = "POST"
-        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.httpMethod, "POST") // 测试 setMethod 方法.
         
         let newURL = URL(string: "http://github.com")!
         request.url = newURL
-        XCTAssertEqual(request.url, newURL)
+        XCTAssertEqual(request.url, newURL) // 测试 setUrl 方法.
     }
     
     func test_headerFields() {
@@ -64,12 +55,12 @@ class TestNSURLRequest : XCTestCase {
         
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         XCTAssertNotNil(request.allHTTPHeaderFields)
-        XCTAssertEqual(request.allHTTPHeaderFields?["Accept"], "application/json")
+        XCTAssertEqual(request.allHTTPHeaderFields?["Accept"], "application/json") // 测试  setHeaderField 方法.
         
         // Setting "accept" should update "Accept"
         request.setValue("application/xml", forHTTPHeaderField: "accept")
         XCTAssertNil(request.allHTTPHeaderFields?["accept"])
-        XCTAssertEqual(request.allHTTPHeaderFields?["Accept"], "application/xml")
+        XCTAssertEqual(request.allHTTPHeaderFields?["Accept"], "application/xml") // 测试 setHeaderField 方法.
         
         // Adding to "Accept" should add to "Accept"
         request.addValue("text/html", forHTTPHeaderField: "Accept")
@@ -89,12 +80,12 @@ class TestNSURLRequest : XCTestCase {
         mutableRequest.setValue("application/json", forHTTPHeaderField: "Accept")
         mutableRequest.httpBody = postBody
 
-        guard let requestCopy1 = mutableRequest.copy() as? NSURLRequest else {
-            XCTFail(); return
+        guard let requestCopy1 = mutableRequest.copy() as? NSURLRequest else { // 测试, copy 方法可以返回正常的值.
+            XCTFail()
+            return
         }
         
-        // Check that all attributes are copied and that the original ones are
-        // unchanged:
+        // 测试 copy 完的对象, 各项数据和原始数据相同.
         XCTAssertEqual(mutableRequest.mainDocumentURL, urlA)
         XCTAssertEqual(requestCopy1.mainDocumentURL, urlA)
         XCTAssertEqual(mutableRequest.httpMethod, "POST")
@@ -129,6 +120,7 @@ class TestNSURLRequest : XCTestCase {
         XCTAssertEqual(requestCopy2.allHTTPHeaderFields?["Accept"], "application/json")
     }
 
+    // 函数的命名, 出现了 数字, 测试用例比较随意, 这里, 其实也没有办法更好的命名, 就是在测试 mutableCopy .
     func test_mutableCopy_1() {
         let originalRequest = NSMutableURLRequest(url: url)
         

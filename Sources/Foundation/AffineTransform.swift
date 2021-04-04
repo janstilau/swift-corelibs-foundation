@@ -10,13 +10,15 @@
 private let ε: CGFloat = CGFloat(2.22045e-16)
 
 
-/**
+/*
  AffineTransform represents an affine transformation matrix of the following form:
 
  [ m11  m12  0 ]
  [ m21  m22  0 ]
  [  tX   tY  1 ]
  */
+
+// 对于 Swift 版本的 AffineTransform 来说, 所有的值, 都存在自己的内部. 6 个 double 值而已.
 public struct AffineTransform : ReferenceConvertible, Hashable, CustomStringConvertible {
     public typealias ReferenceType = NSAffineTransform
 
@@ -34,8 +36,9 @@ public struct AffineTransform : ReferenceConvertible, Hashable, CustomStringConv
                    tX: 0.0,  tY: 0.0)
     }
 
-    /// Creates an affine transformation.
+    // 这种, tuple 的赋值方式, 让代码的意图更加明显.
     public init(m11: CGFloat, m12: CGFloat, m21: CGFloat, m22: CGFloat, tX: CGFloat, tY: CGFloat) {
+        
         (self.m11, self.m12, self.m21, self.m22) = (m11, m12, m21, m22)
         (self.tX, self.tY) = (tX, tY)
     }
@@ -115,6 +118,8 @@ public struct AffineTransform : ReferenceConvertible, Hashable, CustomStringConv
      [ 0  1  0 ]
      [ 0  0  1 ]
      */
+    // static 的特殊属性, 代表着和这个类型相关的数据.
+    // 也可能是一个特殊值.
     public static let identity = AffineTransform(m11: CGFloat(1.0), m12: CGFloat(0.0), m21: CGFloat(0.0), m22: CGFloat(1.0), tX: CGFloat(0.0), tY: CGFloat(0.0))
 
     // Translating
@@ -253,6 +258,7 @@ public struct AffineTransform : ReferenceConvertible, Hashable, CustomStringConv
         return newSize
     }
 
+    // hasher, 不断的吞入组合 hash 的数据.
     public func hash(into hasher: inout Hasher) {
         hasher.combine(m11)
         hasher.combine(m12)
@@ -310,6 +316,7 @@ public struct NSAffineTransformStruct {
     }
 }
 
+// 引用版本的 Transform 数据.
 open class NSAffineTransform : NSObject, NSCopying, NSSecureCoding {
 
     private var affineTransform: AffineTransform
