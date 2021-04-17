@@ -260,7 +260,6 @@ extension Date : CustomPlaygroundDisplayConvertible {
 
 extension Date : Codable {
     public init(from decoder: Decoder) throws {
-        // 时间, 就是时间戳. 存的时候是时间戳, 取得时候, 就用该时间戳重新构造对象.
         let container = try decoder.singleValueContainer()
         let timestamp = try container.decode(Double.self)
         self.init(timeIntervalSinceReferenceDate: timestamp)

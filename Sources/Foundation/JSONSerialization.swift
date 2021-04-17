@@ -4,13 +4,16 @@ extension JSONSerialization {
     public struct ReadingOptions : OptionSet {
         public let rawValue: UInt
         public init(rawValue: UInt) { self.rawValue = rawValue }
+        
         public static let mutableContainers = ReadingOptions(rawValue: 1 << 0)
         public static let mutableLeaves = ReadingOptions(rawValue: 1 << 1)
         public static let allowFragments = ReadingOptions(rawValue: 1 << 2)
     }
+    
     public struct WritingOptions : OptionSet {
         public let rawValue: UInt
         public init(rawValue: UInt) { self.rawValue = rawValue }
+        
         public static let prettyPrinted = WritingOptions(rawValue: 1 << 0)
         public static let sortedKeys = WritingOptions(rawValue: 1 << 1)
         public static let fragmentsAllowed = WritingOptions(rawValue: 1 << 2)
@@ -35,6 +38,8 @@ extension JSONSerialization {
  就如同 propertylist 一样, 存储的值, 是有限制的.
  */
 
+// 这个对象, 是将 Json 字符串, 变为一个 NSDict, NSArray, 或者 单个元素.
+// JSONDecoder, ENCode 则是将JSON对象变为某个类型对象, 他们的责任是不一样的.
 open class JSONSerialization : NSObject {
     
     open class func isValidJSONObject(_ obj: Any) -> Bool {
@@ -42,63 +47,58 @@ open class JSONSerialization : NSObject {
         
         // 这个函数, 必然有递归. 并且, 记录了循环次数.
         func isValidJSONObjectInternal(_ obj: Any?) -> Bool {
-            // 大量使用了 defer.
+            // 作为框架, 设置了一个最大的层级限制.
             guard recursionDepth < JSONSerialization.maximumRecursionDepth else { return false }
             recursionDepth += 1
             defer { recursionDepth -= 1 }
             
+            // 没有值就是 nil, 也是合法的对象.
             guard let obj = obj else {
                 return true
             }
             
             // 这里面, 没有真实的值的转化, 大部分都是类型判断.
-            if !(obj is _NSNumberCastingWithoutBridging) {
-                if obj is String || obj is NSNull || obj is Int || obj is Bool || obj is UInt ||
-                    obj is Int8 || obj is Int16 || obj is Int32 || obj is Int64 ||
-                    obj is UInt8 || obj is UInt16 || obj is UInt32 || obj is UInt64 {
+            // 如果传过来的是, 数值类型, 那么是合法对象.
+            { // 数值类型的判断.
+                if !(obj is _NSNumberCastingWithoutBridging) {
+                    if obj is String || obj is NSNull || obj is Int || obj is Bool || obj is UInt ||
+                        obj is Int8 || obj is Int16 || obj is Int32 || obj is Int64 ||
+                        obj is UInt8 || obj is UInt16 || obj is UInt32 || obj is UInt64 {
+                        return true
+                    }
+                }
+                if let number = obj as? Double  {
+                    return number.isFinite
+                }
+                if let number = obj as? Float  {
+                    return number.isFinite
+                }
+                if let number = obj as? Decimal {
+                    return number.isFinite
+                }
+            }
+           
+            do {
+                // Array 类型的判断.
+                // 就是一个个的判断.
+                if let array = obj as? [Any?] {
+                    for element in array {
+                        guard isValidJSONObjectInternal(element) else {
+                            return false
+                        }
+                    }
                     return true
                 }
             }
             
-            // object is a Double and is not NaN or infinity
-            if let number = obj as? Double  {
-                return number.isFinite
-            }
-            // object is a Float and is not NaN or infinity
-            if let number = obj as? Float  {
-                return number.isFinite
-            }
-            
-            if let number = obj as? Decimal {
-                return number.isFinite
-            }
-            
-            if let array = obj as? [Any?] {
-                for element in array {
-                    guard isValidJSONObjectInternal(element) else {
-                        return false
+            do {
+                // Dict 类型的判断, 就是判断一下 value 值.
+                if let dictionary = obj as? [String: Any?] {
+                    for (_, value) in dictionary {
+                        guard isValidJSONObjectInternal(value) else {
+                            return false
+                        }
                     }
-                }
-                return true
-            }
-            
-            if let dictionary = obj as? [String: Any?] {
-                for (_, value) in dictionary {
-                    guard isValidJSONObjectInternal(value) else {
-                        return false
-                    }
-                }
-                return true
-            }
-            
-            // object is NSNumber and is not NaN or infinity
-            // For better performance, this (most expensive) test should be last.
-            if let number = __SwiftValue.store(obj) as? NSNumber {
-                if CFNumberIsFloatType(number._cfObject) {
-                    let dv = number.doubleValue
-                    let invalid = dv.isInfinite || dv.isNaN
-                    return !invalid
-                } else {
                     return true
                 }
             }
@@ -108,6 +108,8 @@ open class JSONSerialization : NSObject {
         }
         
         // 顶层数据, 必须是数组或者字典.
+        // 所以, 其实是不会有单个元素作为 JSON 的情况存在
+        
         guard obj is [Any?] || obj is [String: Any?] else {
             return false
         }
@@ -115,13 +117,17 @@ open class JSONSerialization : NSObject {
         return isValidJSONObjectInternal(obj)
     }
     
+    // 将数据, 变为 data 的核心方法.
     internal class func _data(withJSONObject value: Any, options opt: WritingOptions, stream: Bool) throws -> Data {
         var jsonStr = [UInt8]()
         
+        // 将所有的 write 操作, 都放到了 JSONWriter 的内部.
+        // Writer 里面, 根本不存储最终的数据, 它仅仅是将自己拿到的对象, 进行序列化.
+        // 然后调用
         var writer = JSONWriter(
             options: opt,
-            // writer 表示, 产生了数据之后, 应该怎么办.
-            writer: { (str: String?) in
+            jsonObjHandler: {
+                (str: String?) in
                 if let str = str {
                     jsonStr.append(contentsOf: str.utf8)
                 }
@@ -143,7 +149,6 @@ open class JSONSerialization : NSObject {
             try writer.serializeJSON(value)
         }
         
-        // 所有的数据, 都放到 jsonStr 里面, 最后变为一个 Data.
         let count = jsonStr.count
         return Data(bytes: &jsonStr, count: count)
     }
@@ -155,6 +160,7 @@ open class JSONSerialization : NSObject {
     /* Create a Foundation object from JSON data. Set the NSJSONReadingAllowFragments option if the parser should allow top-level objects that are not an NSArray or NSDictionary. Setting the NSJSONReadingMutableContainers option will make the parser generate mutable NSArrays and NSDictionaries. Setting the NSJSONReadingMutableLeaves option will make the parser generate mutable NSString objects. If an error occurs during the parse, then the error parameter will be set and the result will be nil.
      The data must be in one of the 5 supported encodings listed in the JSON specification: UTF-8, UTF-16LE, UTF-16BE, UTF-32LE, UTF-32BE. The data may or may not have a BOM. The most efficient encoding to use for parsing is UTF-8, so if you have a choice in encoding the data passed to this method, use UTF-8.
      */
+    // JSON 的反序列化比较复杂, 不详细研究.
     open class func jsonObject(with data: Data, options opt: ReadingOptions = []) throws -> Any {
         return try data.withUnsafeBytes {
             
@@ -295,16 +301,17 @@ private struct JSONWriter {
     let pretty: Bool // 是否格式化
     let sortedKeys: Bool // 是否排序
     let withoutEscapingSlashes: Bool // 是否 slash 进行特殊处理.
-    let writer: (String?) -> Void
+    let jsonedObjHandler: (String?) -> Void
     
-    init(options: JSONSerialization.WritingOptions, writer: @escaping (String?) -> Void) {
+    init(options: JSONSerialization.WritingOptions,
+         jsonObjHandler: @escaping (String?) -> Void) {
         pretty = options.contains(.prettyPrinted)
         sortedKeys = options.contains(.sortedKeys)
         withoutEscapingSlashes = options.contains(.withoutEscapingSlashes)
-        self.writer = writer
+        self.jsonedObjHandler = jsonObjHandler
     }
     
-    // 根据类型, 输出值.
+    // 序列化的总入口, 其实, 就是根据 type, 分发到不同的具体的类型序列化的逻辑.
     mutating func serializeJSON(_ object: Any?) throws {
         
         var toSerialize = object
@@ -320,86 +327,96 @@ private struct JSONWriter {
         
         // For better performance, the most expensive conditions to evaluate should be last.
         switch (obj) {
+        // 字符串, 有着特殊的书写格式
+        // 前后都添加 ", 特殊字符特殊书写
         case let str as String:
             try serializeString(str)
-        case let boolValue as Bool:
-            writer(boolValue.description)
-        case let num as Int:
-            writer(num.description)
-        case let num as Int8:
-            writer(num.description)
-        case let num as Int16:
-            writer(num.description)
-        case let num as Int32:
-            writer(num.description)
-        case let num as Int64:
-            writer(num.description)
-        case let num as UInt:
-            writer(num.description)
-        case let num as UInt8:
-            writer(num.description)
-        case let num as UInt16:
-            writer(num.description)
-        case let num as UInt32:
-            writer(num.description)
-        case let num as UInt64:
-            writer(num.description)
+            
         // 数值, 按照数值的字符串化进行输出.
+        case let boolValue as Bool:
+            jsonedObjHandler(boolValue.description)
+        case let num as Int:
+            jsonedObjHandler(num.description)
+        case let num as Int8:
+            jsonedObjHandler(num.description)
+        case let num as Int16:
+            jsonedObjHandler(num.description)
+        case let num as Int32:
+            jsonedObjHandler(num.description)
+        case let num as Int64:
+            jsonedObjHandler(num.description)
+        case let num as UInt:
+            jsonedObjHandler(num.description)
+        case let num as UInt8:
+            jsonedObjHandler(num.description)
+        case let num as UInt16:
+            jsonedObjHandler(num.description)
+        case let num as UInt32:
+            jsonedObjHandler(num.description)
+        case let num as UInt64:
+            jsonedObjHandler(num.description)
         
-        case let array as Array<Any?>:
-            try serializeArray(array)
-        case let dict as Dictionary<AnyHashable, Any?>:
-            try serializeDictionary(dict)
+        // 特殊数值类型的书写, 有着对于最后的 .0 的删除操作.
         case let num as Float:
             try serializeFloat(num)
         case let num as Double:
             try serializeFloat(num)
         case let num as Decimal:
-            writer(num.description)
+            jsonedObjHandler(num.description)
         case let num as NSDecimalNumber:
-            writer(num.description)
+            jsonedObjHandler(num.description)
+        
+        // Null 的书写, 就是添加了 null
         case is NSNull:
             try serializeNull()
-        case _ where __SwiftValue.store(obj) is NSNumber:
-            let num = __SwiftValue.store(obj) as! NSNumber
-            writer(num.description)
+            
+        // 上面都是对于对象的书写, 对于结构, 数组和字典, 有着嵌套的书写格式
+        case let array as Array<Any?>:
+            try serializeArray(array)
+        case let dict as Dictionary<AnyHashable, Any?>:
+            try serializeDictionary(dict)
         default:
             throw NSError(domain: NSCocoaErrorDomain, code: CocoaError.propertyListReadCorrupt.rawValue, userInfo: [NSDebugDescriptionErrorKey : "Invalid object cannot be serialized"])
         }
     }
     
     func serializeString(_ str: String) throws {
-        writer("\"") // 先把 " 写上去. JSON 的字符串必须 "" 包裹.
+        // 因为, JSON 规定了字符串类型, 必须是 " 包裹, 所以要在前面加一个 "
+        jsonedObjHandler("\"")
         for scalar in str.unicodeScalars {
             switch scalar {
+            // 对于不可见的特殊字符, 用特殊的形式进行了书写
             case "\"":
-                writer("\\\"") // U+0022 quotation mark
+                jsonedObjHandler("\\\"") // U+0022 quotation mark
             case "\\":
-                writer("\\\\") // U+005C reverse solidus
+                jsonedObjHandler("\\\\") // U+005C reverse solidus
             case "/":
-                if !withoutEscapingSlashes { writer("\\") }
-                writer("/") // U+002F solidus
+                if !withoutEscapingSlashes { jsonedObjHandler("\\") }
+                jsonedObjHandler("/") // U+002F solidus
             case "\u{8}":
-                writer("\\b") // U+0008 backspace
+                jsonedObjHandler("\\b") // U+0008 backspace
             case "\u{c}":
-                writer("\\f") // U+000C form feed
+                jsonedObjHandler("\\f") // U+000C form feed
             case "\n":
-                writer("\\n") // U+000A line feed
+                jsonedObjHandler("\\n") // U+000A line feed
             case "\r":
-                writer("\\r") // U+000D carriage return
+                jsonedObjHandler("\\r") // U+000D carriage return
             case "\t":
-                writer("\\t") // U+0009 tab
-            // 上面, 对于一些特殊字符, 有着特殊的书写方式.
+                jsonedObjHandler("\\t") // U+0009 tab
+            
+            // 对特定的, 应该是 UTF16 里面的内容, 用特殊形式惊醒了书写
             case "\u{0}"..."\u{f}":
-                writer("\\u000\(String(scalar.value, radix: 16))") // U+0000 to U+000F
+                jsonedObjHandler("\\u000\(String(scalar.value, radix: 16))")
             case "\u{10}"..."\u{1f}":
-                writer("\\u00\(String(scalar.value, radix: 16))") // U+0010 to U+001F
+                jsonedObjHandler("\\u00\(String(scalar.value, radix: 16))")
+                
+            // 对于一般的字符, 就是简单的书写
             default:
-                writer(String(scalar))
+                jsonedObjHandler(String(scalar))
             }
         }
         // 写最后的"
-        writer("\"")
+        jsonedObjHandler("\"")
     }
     
     private func serializeFloat<T: FloatingPoint & LosslessStringConvertible>(_ num: T) throws {
@@ -410,7 +427,7 @@ private struct JSONWriter {
         if str.hasSuffix(".0") {
             str.removeLast(2)
         }
-        writer(str)
+        jsonedObjHandler(str)
     }
     
     mutating func serializeNumber(_ num: NSNumber) throws {
@@ -419,17 +436,17 @@ private struct JSONWriter {
         } else {
             switch num._cfTypeID {
             case CFBooleanGetTypeID():
-                writer(num.boolValue.description)
+                jsonedObjHandler(num.boolValue.description)
             default:
-                writer(num.stringValue)
+                jsonedObjHandler(num.stringValue)
             }
         }
     }
     
     mutating func serializeArray(_ array: [Any?]) throws {
-        writer("[") // 先写 [
+        jsonedObjHandler("[") // 先写 [
         if pretty {
-            writer("\n")
+            jsonedObjHandler("\n")
             incIndent() // 只有在写对象的时候, 才增加缩进.
         }
         
@@ -438,26 +455,32 @@ private struct JSONWriter {
             if first {
                 first = false
             } else if pretty {
-                writer(",\n")
+                jsonedObjHandler(",\n")
             } else {
-                writer(",")
+                jsonedObjHandler(",")
             }
             if pretty {
                 writeIndent() // 格式化输出, 书写缩进.
             }
-            try serializeJSON(elem) // 递归调用输出.
+            // 对于数组的内部值, 还是调用 serializeJSON 进行输出.
+            // 所以, 如果里面还是有结构, 层级继续下沉
+            try serializeJSON(elem)
         }
+        
+        // 递归就是, 保持自己内部的结构对称, 自然最终的输出结果就是正确的
         if pretty {
-            writer("\n")
+            jsonedObjHandler("\n")
             decAndWriteIndent()
         }
-        writer("]")
+        jsonedObjHandler("]")
     }
     
     mutating func serializeDictionary(_ dict: Dictionary<AnyHashable, Any?>) throws {
-        writer("{")
+            
+        // 数组的开始部分输出
+        jsonedObjHandler("{")
         if pretty {
-            writer("\n")
+            jsonedObjHandler("\n")
             incIndent()
             if dict.count > 0 {
                 writeIndent()
@@ -466,14 +489,16 @@ private struct JSONWriter {
         
         var first = true
         
+        // 数组的每个 key value 的输出
+        // 可以直接在函数里面定义函数, 让代码变的更加清晰. 这比闭包定义复用好的太多. 闭包太过于复杂, 不能很好地体现复用性.
         func serializeDictionaryElement(key: AnyHashable, value: Any?) throws {
             if first {
                 first = false
             } else if pretty {
-                writer(",\n")
+                jsonedObjHandler(",\n")
                 writeIndent()
             } else {
-                writer(",")
+                jsonedObjHandler(",")
             }
             // 先写 key, 然后 :, 然后 value
             if let key = key as? String {
@@ -481,10 +506,11 @@ private struct JSONWriter {
             } else {
                 throw NSError(domain: NSCocoaErrorDomain, code: CocoaError.propertyListReadCorrupt.rawValue, userInfo: [NSDebugDescriptionErrorKey : "NSDictionary key must be NSString"])
             }
-            pretty ? writer(" : ") : writer(":")
+            pretty ? jsonedObjHandler(" : ") : jsonedObjHandler(":")
             try serializeJSON(value)
         }
         
+        // key 先进行排序, 在输出每个 keyvalue
         if sortedKeys {
             let elems = try dict.sorted(by: { a, b in
                 guard let a = a.key as? String,
@@ -506,16 +532,17 @@ private struct JSONWriter {
             }
         }
         
+        // 数组的结束部分输出
         if pretty {
-            writer("\n")
+            jsonedObjHandler("\n")
             decAndWriteIndent()
         }
-        writer("}")
+        jsonedObjHandler("}")
     }
     
     // 调用闭包, 把 Null 写出去.
     func serializeNull() throws {
-        writer("null")
+        jsonedObjHandler("null")
     }
     
     let indentAmount = 2
@@ -536,7 +563,7 @@ private struct JSONWriter {
     
     func writeIndent() {
         for _ in 0..<indent {
-            writer(" ")
+            jsonedObjHandler(" ")
         }
     }
     

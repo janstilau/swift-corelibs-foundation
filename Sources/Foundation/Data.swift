@@ -2855,7 +2855,9 @@ extension Data : Codable {
     
     public func encode(to encoder: Encoder) throws {
         var container = encoder.unkeyedContainer()
-        try withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
+        // 使用数组, 将自己的值, 全部放到数组里面
+        try withUnsafeBytes {
+            (buffer: UnsafeRawBufferPointer) in
             try container.encode(contentsOf: buffer)
         }
     }
