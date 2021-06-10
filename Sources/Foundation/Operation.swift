@@ -83,6 +83,9 @@ open class Operation : NSObject {
     }
     
     // 数据部分. 所有的都是私有数据, 外界使用, 用更好的属性接口.
+    // 这里是 Internal, 也就是说, 只有当前的包里可以使用,.
+    // 这里能够很好地体现, Swift 如何进行访问控制的, Foundation 包内, 可能会有很多类是配合 Operation 使用的, 这些类直接可以拿到 Operation 里面的值进行修改.
+    // 而包的使用者, 只能是使用 Operation 暴露出去的接口.
     internal var __previousOperation: Unmanaged<Operation>?
     internal var __nextOperation: Unmanaged<Operation>?
     internal var __nextPriorityOperation: Unmanaged<Operation>?

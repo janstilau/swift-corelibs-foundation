@@ -16,118 +16,51 @@ public struct CGFloat {
         self.native = NativeType(value)
     }
     
-    #if !(os(Windows) || os(Android)) && (arch(i386) || arch(x86_64))
-    @_transparent public init(_ value: Float80) {
-        self.native = NativeType(value)
-    }
-    #endif
-    
     @_transparent public init(_ value: CGFloat) {
         self.native = value.native
     }
     
-    /// Creates a new value, rounded to the closest possible representation.
-    ///
-    /// If two representable values are equally close, the result is the value
-    /// with more trailing zeros in its significand bit pattern.
-    ///
-    /// - Parameter value: The integer to convert to a floating-point value.
     public init(_ value: UInt8) {
         self.native = NativeType(value)
     }
     
-    /// Creates a new value, rounded to the closest possible representation.
-    ///
-    /// If two representable values are equally close, the result is the value
-    /// with more trailing zeros in its significand bit pattern.
-    ///
-    /// - Parameter value: The integer to convert to a floating-point value.
     public init(_ value: Int8) {
         self.native = NativeType(value)
     }
     
-    /// Creates a new value, rounded to the closest possible representation.
-    ///
-    /// If two representable values are equally close, the result is the value
-    /// with more trailing zeros in its significand bit pattern.
-    ///
-    /// - Parameter value: The integer to convert to a floating-point value.
     public init(_ value: UInt16) {
         self.native = NativeType(value)
     }
     
-    /// Creates a new value, rounded to the closest possible representation.
-    ///
-    /// If two representable values are equally close, the result is the value
-    /// with more trailing zeros in its significand bit pattern.
-    ///
-    /// - Parameter value: The integer to convert to a floating-point value.
     public init(_ value: Int16) {
         self.native = NativeType(value)
     }
     
-    /// Creates a new value, rounded to the closest possible representation.
-    ///
-    /// If two representable values are equally close, the result is the value
-    /// with more trailing zeros in its significand bit pattern.
-    ///
-    /// - Parameter value: The integer to convert to a floating-point value.
     public init(_ value: UInt32) {
         self.native = NativeType(value)
     }
     
-    /// Creates a new value, rounded to the closest possible representation.
-    ///
-    /// If two representable values are equally close, the result is the value
-    /// with more trailing zeros in its significand bit pattern.
-    ///
-    /// - Parameter value: The integer to convert to a floating-point value.
     public init(_ value: Int32) {
         self.native = NativeType(value)
     }
     
-    /// Creates a new value, rounded to the closest possible representation.
-    ///
-    /// If two representable values are equally close, the result is the value
-    /// with more trailing zeros in its significand bit pattern.
-    ///
-    /// - Parameter value: The integer to convert to a floating-point value.
     public init(_ value: UInt64) {
         self.native = NativeType(value)
     }
     
-    /// Creates a new value, rounded to the closest possible representation.
-    ///
-    /// If two representable values are equally close, the result is the value
-    /// with more trailing zeros in its significand bit pattern.
-    ///
-    /// - Parameter value: The integer to convert to a floating-point value.
     public init(_ value: Int64) {
         self.native = NativeType(value)
     }
     
-    /// Creates a new value, rounded to the closest possible representation.
-    ///
-    /// If two representable values are equally close, the result is the value
-    /// with more trailing zeros in its significand bit pattern.
-    ///
-    /// - Parameter value: The integer to convert to a floating-point value.
     public init(_ value: UInt) {
         self.native = NativeType(value)
     }
     
-    /// Creates a new value, rounded to the closest possible representation.
-    ///
-    /// If two representable values are equally close, the result is the value
-    /// with more trailing zeros in its significand bit pattern.
-    ///
-    /// - Parameter value: The integer to convert to a floating-point value.
     public init(_ value: Int) {
         self.native = NativeType(value)
     }
     
-    /// The native value.
-    // 初始化方法, 和真正的数据, 放到了类定义区域.
+    // 数据部分, 就是一个 Double 值.
     public var native: NativeType
 }
 

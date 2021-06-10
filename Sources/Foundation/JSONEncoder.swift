@@ -16,16 +16,15 @@ extension Dictionary : _JSONStringDictionaryDecodableMarker where Key == String,
 // JSON Encoder
 //===----------------------------------------------------------------------===//
 /*
- 实际上，JSONEncoder 甚至都没有实现 Encoder 协议。相反，它只是一个叫做 _JSONEncoder 的私有类的封装，这个私有类实现了 Encoder 协议，并且进行实际的编码工 作。
+ 实际上，JSONEncoder 甚至都没有实现 Encoder 协议。相反，它只是一个叫做 _JSONEncoder 的私有类的封装，这个私有类实现了 Encoder 协议，并且进行实际的编码工作。
  之所以这样做，是因为顶层编码器 (译注:这里指 JSONEncoder) 应该提供的 API (这个 API 通常只用于启动编码过程)，和在编码过程中传递给可编码类型的 Encoder 对象 (译注:这 里指 _JSONEncoder) 是截然不同的。
- 将这些任务清晰地分开，意味着在任意给定的情景下，使用编码器的一方只能访问到适当的 API。例如，一个 Codable 类型不能在编码过程中重新配置 编码器，因为公开的配置 API 只暴露在顶层编码器的定义里。
+ 将这些任务清晰地分开，意味着在任意给定的情景下，使用编码器的一方只能访问到适当的 API。例如，一个 Codable 类型不能在编码过程中重新配置编码器，因为公开的配置 API 只暴露在顶层编码器的定义里。
  这是正确的 Api 的设计. 对外暴露的, 就应该是简单的一个返回值是 data 的接口.
  实际上, 将值变为序列化的格式, 然后写入, 这两个过程在 JSONEncoder 中是分开的.
  */
 open class JSONEncoder {
     // MARK: Options
     
-    // 总的输出格式的配置
     public struct OutputFormatting : OptionSet {
         public let rawValue: UInt
         public init(rawValue: UInt) {
@@ -33,12 +32,15 @@ open class JSONEncoder {
         }
         
         // OptionSet 类型里面, 必要有几个 static 的值, 这些值是 set 的有意义的值
+        // 这里使用 OptinaSet, 是因为这几个值, 是可以并存的. 这些是输出的 JSON 格式, 并不互斥.
         public static let prettyPrinted = OutputFormatting(rawValue: 1 << 0)
         public static let sortedKeys    = OutputFormatting(rawValue: 1 << 1)
         public static let withoutEscapingSlashes = OutputFormatting(rawValue: 1 << 3)
     }
     
-    // 对于时间如何输出的配置.
+    // 这里使用 Enum, 是因为如何输出日期, 本身是一件相互互斥的行为.
+    // Enum 的好处在这又体现出来了, 可以藏相关的数据进去, 这样让代码更加的清晰.
+    // Enum 的关联值最大的好处就在这里, 赋值的时候, 一定要有关联值, 没有关联值的 enum 是没有意义的.
     public enum DateEncodingStrategy {
         // 所谓, deferredToDate, 就是调用 date 的 encode 方法来获取对应的数据
         case deferredToDate
@@ -54,15 +56,13 @@ open class JSONEncoder {
         // 传入 Date, Encode 对象, 由闭包规定方法.
         case custom((Date, Encoder) throws -> Void)
     }
-    
-    // 如何将 Data 进行输出的配置
     public enum DataEncodingStrategy {
         case deferredToData
         case base64
         case custom((Data, Encoder) throws -> Void)
     }
     
-    /// The strategy to use for non-JSON-conforming floating-point values (IEEE 754 infinity and NaN).
+    
     public enum NonConformingFloatEncodingStrategy {
         /// Throw upon encountering non-conforming values. This is the default strategy.
         case `throw`
@@ -71,12 +71,12 @@ open class JSONEncoder {
         case convertToString(positiveInfinity: String, negativeInfinity: String, nan: String)
     }
     
-    // 如何输出 key 的配置
+    // Key 如何书写的策略
     public enum KeyEncodingStrategy {
         // 使用原始的 key 值.
         case useDefaultKeys
-        
         // 使用下划线的方式. 是和下面的 _convertToSnakeCase 配套使用的.
+        // 将相应的方法, 放到了最适合这个方法的类型里面, 这样类的责任更加的清晰.
         case convertToSnakeCase
         
         /// Provide a custom conversion to the key in the encoded JSON from the keys specified by the encoded types.
@@ -134,8 +134,7 @@ open class JSONEncoder {
         }
     }
     
-    
-    // 上面的配置, 都被存了起来. 在真正输出的时候, 按照这些存储的值, 进行最终的字符串的书写.
+    // 这个类, 是启动类. 它并不做任何的直接的编码的工作. 所以, 所有的这些有关实际编码的配置, 最终打包出去, 给实际工作的 _JSONEncoder 来使用.
     open var outputFormatting: OutputFormatting = []
     open var dateEncodingStrategy: DateEncodingStrategy = .deferredToDate
     open var dataEncodingStrategy: DataEncodingStrategy = .base64
@@ -143,7 +142,8 @@ open class JSONEncoder {
     open var keyEncodingStrategy: KeyEncodingStrategy = .useDefaultKeys
     open var userInfo: [CodingUserInfoKey : Any] = [:]
     
-    fileprivate struct _CodingFormatConfig {
+    // 这是一个配置类, 叫做 Options 不太合理. 里面存储的是序列化过程中, 特殊类型的值应该怎么序列化.
+    fileprivate struct _Options {
         let dateEncodingStrategy: DateEncodingStrategy
         let dataEncodingStrategy: DataEncodingStrategy
         let nonConformingFloatEncodingStrategy: NonConformingFloatEncodingStrategy
@@ -151,8 +151,8 @@ open class JSONEncoder {
         let userInfo: [CodingUserInfoKey : Any]
     }
     
-    fileprivate var options: _CodingFormatConfig {
-        return _CodingFormatConfig(dateEncodingStrategy: dateEncodingStrategy,
+    fileprivate var options: _Options {
+        return _Options(dateEncodingStrategy: dateEncodingStrategy,
                         dataEncodingStrategy: dataEncodingStrategy,
                         nonConformingFloatEncodingStrategy: nonConformingFloatEncodingStrategy,
                         keyEncodingStrategy: keyEncodingStrategy,
@@ -161,24 +161,24 @@ open class JSONEncoder {
     
     public init() {}
     
-    // Encoder 作为整个序列化的过程的发起者.
-    // 它在里面, 存储了一系列的如何序列化的配置信息.
-    // 真正的具体某个值如何进行 string 的变化, 交给了 _JSONEncoder
+    // 开启序列化的任务.
+    // 制造一个 _JSONEncoder 来序列化.
     open func encode<T : Encodable>(_ value: T) throws -> Data {
+        // _JSONEncoder 的内部, 将 value, 转变为基本数据类型和 NSArray, NSDictionary, 然后交给 JSONSerialization.data 做最后的序列化的工作.
         
         let encoder = _JSONEncoder(options: self.options)
         
         // topLevel 最后, 会是一个 Dict, 一个 Array, 一个字符串, 或者一个数字. 也就是, JSON 所规定的类型.
-        guard let topLevel = try encoder.boxObject(value) else {
+        guard let topLevel = try encoder.box_(value) else {
             throw EncodingError.invalidValue(value, EncodingError.Context(codingPath: [], debugDescription: "Top-level \(T.self) did not encode any values."))
         }
         
-        let writingOptions = JSONSerialization.WritingOptions(rawValue: self.outputFormatting.rawValue).union(.fragmentsAllowed)
+        let writingOptions =
+            JSONSerialization.WritingOptions(self.outputFormatting.rawValue).union(.fragmentsAllowed)
         
         do {
-            // 最后, 变为 Data 的过程还是交给 JSONSerialization
-            // TopLevel, 现在只会是 Array, 或者 Dict.
-            // TopLevel 里面的值, 也仅仅会是 Dict, Array, String, Number, URL, Date, Data, Null 这些, JSON 相互配合的类型了
+            // _JSONEncoder 是将 VALUE 变为了 NSDictionary 或者 NSArray
+            // 最终还是 JSONSerialization 进行 data 的转化.
             return try JSONSerialization.data(withJSONObject: topLevel, options: writingOptions)
         } catch {
             throw EncodingError.invalidValue(value, EncodingError.Context(codingPath: [], debugDescription: "Unable to encode the given top-level value to JSON.", underlyingError: error))
@@ -188,7 +188,25 @@ open class JSONEncoder {
 
 // MARK: - _JSONEncoder
 
-// 真正的进行序列化的类. 
+/*
+ /// A type that can encode values into a native format for external
+ /// representation.
+ public protocol Encoder {
+
+     var codingPath: [CodingKey] { get }
+     var userInfo: [CodingUserInfoKey : Any] { get }
+        
+ public struct KeyedEncodingContainer<K> : KeyedEncodingContainerProtocol where K : CodingKey 
+     func container<Key>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> where Key : CodingKey
+ public protocol UnkeyedEncodingContainer
+     func unkeyedContainer() -> UnkeyedEncodingContainer
+ public protocol SingleValueEncodingContainer
+     func singleValueContainer() -> SingleValueEncodingContainer
+ }
+ */
+
+// Encoder 的抽象是, 可以返回对应的 container, 然后这些 container 是实际可以进行编码解码的.
+// 这样, 是 json 编解码, 还是 Plist 编解码, 就可以变化了.
 fileprivate class _JSONEncoder : Encoder {
     // MARK: Properties
     
@@ -196,20 +214,15 @@ fileprivate class _JSONEncoder : Encoder {
     fileprivate var storage: _JSONEncodingStorage
     
     /// Options set on the top-level encoder.
-    fileprivate let options: JSONEncoder._CodingFormatConfig
+    fileprivate let options: JSONEncoder._Options
     
-    // Json 的序列化, 本身就是一个栈的模型, 这里数组, 主要就是记录了当前正在序列化的 key, 使用的时候, 要注意入栈出栈的时机
     public var codingPath: [CodingKey]
     
-    /// Contextual user-provided information for use during encoding.
     public var userInfo: [CodingUserInfoKey : Any] {
         return self.options.userInfo
     }
     
-    // MARK: - Initialization
-    
-    /// Initializes `self` with the given top-level encoder options.
-    fileprivate init(options: JSONEncoder._CodingFormatConfig, codingPath: [CodingKey] = []) {
+    fileprivate init(options: JSONEncoder._Options, codingPath: [CodingKey] = []) {
         self.options = options
         self.storage = _JSONEncodingStorage()
         self.codingPath = codingPath
@@ -218,7 +231,6 @@ fileprivate class _JSONEncoder : Encoder {
     /// Returns whether a new element can be encoded at this coding path.
     ///
     /// `true` if an element has not yet been encoded at this coding path; `false` otherwise.
-    // 这是一个计算属性.
     fileprivate var canEncodeNewValue: Bool {
         // Every time a new value gets encoded, the key it's encoded for is pushed onto the coding path (even if it's a nil key from an unkeyed container).
         // At the same time, every time a container is requested, a new value gets pushed onto the storage stack.
@@ -229,10 +241,7 @@ fileprivate class _JSONEncoder : Encoder {
         return self.storage.count == self.codingPath.count
     }
     
-    // 各种, 取得相关 Container 的时候, 都会有一个入栈 Container 的动作
-    // var container = encoder.container(keyedBy: CodingKeys.self)
-    // 这里, 传递过来的 key, 其实是各个类型自己定义的 CodingKeys 类.
-    // 所以, 改名的工作, 其实就是 KeyedEncodingContainer 这个类完成的
+    // 返回, keyValue 映射的 Container.
     public func container<Key>(keyedBy: Key.Type) -> KeyedEncodingContainer<Key> {
         // If an existing keyed container was already requested, return that one.
         let topContainer: NSMutableDictionary
@@ -274,10 +283,10 @@ fileprivate class _JSONEncoder : Encoder {
 
 // MARK: - Encoding Storage and Containers
 
-// 序列化是一个层级序列的过程, 使用一个专门的数据结构, 记录一下当前的层级.
-// _JSONEncodingStorage 保证了, 层级里面, 都是 JSON 想对应的数据结构.
-// 对象, 就是 Dict, Array 就是 Array. 其他的, 就都是各自对应的 Number, Date 等.
-// 在
+// 这个类, 用来存储当前的序列化的层级结构.
+// 例如, A 里面有 B, B 里面有 C , 都是应该序列化的 Dict.
+// 那么序列化的过程里面, 会出现 A, B, C 的结构, 当 C 序列化完毕, 会出现 A,B 的结构, 然后是 A 的结构
+// 最终, A 对应的 Dict, 会有所有的信息, 然后输入到文件里面.
 fileprivate struct _JSONEncodingStorage {
     // MARK: Properties
     
@@ -319,10 +328,9 @@ fileprivate struct _JSONEncodingStorage {
 }
 
 
-// JSON 实现的, 对于 KeyedEncodingContainerProtocol 的实现.
-// 对于 JSON 来说, 他其实只能序列化, Number, String, Bool, Null , Array, Dict 这些值, 而 Array, Dict 最终又会变为前面的基本数据类型.
+// KeyValue 对应的 Container. 其实里面就是一个 NSDictionary.
+// 各种 encode 操作, 其实就是将对应的值, 放到了 NSDictionary 上面.
 fileprivate struct _JSONKeyedEncodingContainer<K : CodingKey> : KeyedEncodingContainerProtocol {
-    
     typealias Key = K
     
     // MARK: Properties
@@ -334,12 +342,12 @@ fileprivate struct _JSONKeyedEncodingContainer<K : CodingKey> : KeyedEncodingCon
     private let container: NSMutableDictionary
     
     /// The path of coding keys taken to get to this point in encoding.
+    // 这个值, 其实没有太大的意义, 仅仅是维护栈的环境而已.
+    // 并且, 也不需要共享. 一个 Container 维护自己的 codingPath 即可, 因为下一个 Container 结束的时候, CodingPath 应该和初值相同.
     private(set) public var codingPath: [CodingKey]
     
     /// Initializes `self` with the given references.
-    fileprivate init(referencing encoder: _JSONEncoder,
-                     codingPath: [CodingKey],
-                     wrapping container: NSMutableDictionary) {
+    fileprivate init(referencing encoder: _JSONEncoder, codingPath: [CodingKey], wrapping container: NSMutableDictionary) {
         self.encoder = encoder
         self.codingPath = codingPath
         self.container = container
@@ -348,6 +356,8 @@ fileprivate struct _JSONKeyedEncodingContainer<K : CodingKey> : KeyedEncodingCon
     // MARK: - Coding Path Operations
     
     private func _converted(_ key: CodingKey) -> CodingKey {
+        // 从 encoder 里面去取值.
+        // 这样, 所有层级对于公用配置的使用是统一的.
         switch encoder.options.keyEncodingStrategy {
         case .useDefaultKeys:
             return key
@@ -359,18 +369,11 @@ fileprivate struct _JSONKeyedEncodingContainer<K : CodingKey> : KeyedEncodingCon
         }
     }
     
-    // MARK: - KeyedEncodingContainerProtocol Methods
-    // 各个业务数据类里面, encode value for key, 就是在这里完成的.
+    // KeyValue cotatiner 对于 enocde 各种方法的实现.
     
-    // self.container 里面, 对应的是对象相关的 NSMutableDict/
-    // self.encoder 里面, 是每个对象如何序列化的序列化器.
-    
-    // encode value for key 中, key 是 CodingKey 类型的.
-    // 每个类里面, 专门定义自己的 CodingKey 的 enum, 这样, 类型就固定住了.
-    // value 如何表示, 由 self.encoder 的 box 函数决定
-    // 而 key 值, 由 enum 的 stringValue 来决定. 这就是为什么, 我们能够替换 case 名作为 key 名的原因所在.
-    
-    // 所有的 Key, 都 _bridgeToObjectiveC, 是因为 NSDict 里面, 就是存的 NSString.
+
+    // 因为 _JSONEncoder 是 Single Encoder, 所以, 各种值是用 self.encoder 进行的编码工作.
+    // 之所以, Codingkey 可以充当 name, 就是因为这里, 显示的将它们转化成为了 stringValue.
     public mutating func encodeNil(forKey key: Key)               throws { self.container[_converted(key).stringValue._bridgeToObjectiveC()] = NSNull() }
     public mutating func encode(_ value: Bool, forKey key: Key)   throws { self.container[_converted(key).stringValue._bridgeToObjectiveC()] = self.encoder.box(value) }
     public mutating func encode(_ value: Int, forKey key: Key)    throws { self.container[_converted(key).stringValue._bridgeToObjectiveC()] = self.encoder.box(value) }
@@ -383,10 +386,15 @@ fileprivate struct _JSONKeyedEncodingContainer<K : CodingKey> : KeyedEncodingCon
     public mutating func encode(_ value: UInt16, forKey key: Key) throws { self.container[_converted(key).stringValue._bridgeToObjectiveC()] = self.encoder.box(value) }
     public mutating func encode(_ value: UInt32, forKey key: Key) throws { self.container[_converted(key).stringValue._bridgeToObjectiveC()] = self.encoder.box(value) }
     public mutating func encode(_ value: UInt64, forKey key: Key) throws { self.container[_converted(key).stringValue._bridgeToObjectiveC()] = self.encoder.box(value) }
-    public mutating func encode(_ value: String, forKey key: Key) throws { self.container[_converted(key).stringValue._bridgeToObjectiveC()] = self.encoder.boxString(value) }
+    public mutating func encode(_ value: String, forKey key: Key) throws { self.container[_converted(key).stringValue._bridgeToObjectiveC()] = self.encoder.box(value) }
     
+    /*
+     对于可能抛出错误的地方, 都使用了
+     self.encoder.codingPath.append(key)
+     defer { self.encoder.codingPath.removeLast() }
+     的写法, 这样, 处理 error 的地方, 可以使用 codingPath 来检查数据.
+     */
     public mutating func encode(_ value: Float, forKey key: Key)  throws {
-        // Since the float may be invalid and throw, the coding path needs to contain this key.
         self.encoder.codingPath.append(key)
         defer { self.encoder.codingPath.removeLast() }
         self.container[_converted(key).stringValue._bridgeToObjectiveC()] = try self.encoder.box(value)
@@ -402,16 +410,20 @@ fileprivate struct _JSONKeyedEncodingContainer<K : CodingKey> : KeyedEncodingCon
     public mutating func encode<T : Encodable>(_ value: T, forKey key: Key) throws {
         self.encoder.codingPath.append(key)
         defer { self.encoder.codingPath.removeLast() }
+        // self.encoder.box(value) 的返回值, 是一个 NSObject.
         self.container[_converted(key).stringValue._bridgeToObjectiveC()] = try self.encoder.box(value)
     }
     
+    // nested, 就是进入一层. 一个新的 NSDict.
+    // 这个新的 NSDict 和当前的 NSDict 进行了链接. 然后新的 Container 各种操作, 最终会保留在当前的 Dict 里面.
     public mutating func nestedContainer<NestedKey>(keyedBy keyType: NestedKey.Type, forKey key: Key) -> KeyedEncodingContainer<NestedKey> {
         let dictionary = NSMutableDictionary()
         self.container[_converted(key).stringValue._bridgeToObjectiveC()] = dictionary
         self.codingPath.append(key)
         defer { self.codingPath.removeLast() }
-        
-        let container = _JSONKeyedEncodingContainer<NestedKey>(referencing: self.encoder, codingPath: self.codingPath, wrapping: dictionary)
+        let container = _JSONKeyedEncodingContainer<NestedKey>(referencing: self.encoder,
+                                                               codingPath: self.codingPath,
+                                                               wrapping: dictionary)
         return KeyedEncodingContainer(container)
     }
     
@@ -449,7 +461,7 @@ fileprivate struct _JSONUnkeyedEncodingContainer : UnkeyedEncodingContainer {
         self.container = container
     }
     
-    // 使用 unkeyed 进行 encode, 就是不断的向 数组里面, 填充数据而已了.
+    // 基本数据类型, 就是数组的按序排列而已.
     public mutating func encodeNil()             throws { self.container.add(NSNull()) }
     public mutating func encode(_ value: Bool)   throws { self.container.add(self.encoder.box(value)) }
     public mutating func encode(_ value: Int)    throws { self.container.add(self.encoder.box(value)) }
@@ -462,7 +474,7 @@ fileprivate struct _JSONUnkeyedEncodingContainer : UnkeyedEncodingContainer {
     public mutating func encode(_ value: UInt16) throws { self.container.add(self.encoder.box(value)) }
     public mutating func encode(_ value: UInt32) throws { self.container.add(self.encoder.box(value)) }
     public mutating func encode(_ value: UInt64) throws { self.container.add(self.encoder.box(value)) }
-    public mutating func encode(_ value: String) throws { self.container.add(self.encoder.boxString(value)) }
+    public mutating func encode(_ value: String) throws { self.container.add(self.encoder.box(value)) }
     
     public mutating func encode(_ value: Float)  throws {
         self.encoder.codingPath.append(_JSONKey(index: self.count))
@@ -507,16 +519,21 @@ fileprivate struct _JSONUnkeyedEncodingContainer : UnkeyedEncodingContainer {
     }
 }
 
-// JSONEncoder 是如何实现 SingleValueEncodingContainer 协议的.
-// 里面的每一个 encode, 都有着 storage 的 push 操作.
-// 相应的, 在序列化完毕之后, 应该有 pop 操作.
+/*
+ 实际上, 上面的 KeyedContaner, UnkeyContainer 所做的, 是结构上的保持.
+ KeyedContrainer 保证了, 每个操作, 最终都落到 NSDict 上.
+ UnKeyedContainer 保证了, 每个操作, 最终都落到了 NSArray 上.
+ 真正的一个数据如何进行 Encode, 是 SingleValueEncodingContainer, 也就是 _JSONEncoder 的责任.
+ */
+
+
+
 
 extension _JSONEncoder : SingleValueEncodingContainer {
     fileprivate func assertCanEncodeNewValue() {
         precondition(self.canEncodeNewValue, "Attempt to encode value through single value container when previously value already encoded.")
     }
     
-    // SingleValueEncodingContainer 里面, 所有的都有一个 push 的操作.
     public func encodeNil() throws {
         assertCanEncodeNewValue()
         self.storage.push(container: NSNull())
@@ -579,7 +596,7 @@ extension _JSONEncoder : SingleValueEncodingContainer {
     
     public func encode(_ value: String) throws {
         assertCanEncodeNewValue()
-        self.storage.push(container: self.boxString(value))
+        self.storage.push(container: self.box(value))
     }
     
     public func encode(_ value: Float) throws {
@@ -599,26 +616,10 @@ extension _JSONEncoder : SingleValueEncodingContainer {
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 // MARK: - Concrete Value Representations
 
-// 实际的, 对于值如何写入到 Dict 里面, 还是在 JSONEncode 里面
-// 将, 值如何进行序列化的过程, 统一到一个地方.
-// 感觉可以专门写一个类来做这件事.
+// _JSONEncoder 是 Single Value 的 Container, 所以, 单个数据类型如何序列化的工作, 写在这里.
 extension _JSONEncoder {
-    
-    // 基本数据类型的包装. 这里, 都包装成为了 OC 的类型.
     fileprivate func box(_ value: Bool)   -> NSObject { return NSNumber(value: value) }
     fileprivate func box(_ value: Int)    -> NSObject { return NSNumber(value: value) }
     fileprivate func box(_ value: Int8)   -> NSObject { return NSNumber(value: value) }
@@ -630,9 +631,7 @@ extension _JSONEncoder {
     fileprivate func box(_ value: UInt16) -> NSObject { return NSNumber(value: value) }
     fileprivate func box(_ value: UInt32) -> NSObject { return NSNumber(value: value) }
     fileprivate func box(_ value: UInt64) -> NSObject { return NSNumber(value: value) }
-    fileprivate func boxString(_ value: String) -> NSObject {
-        return NSString(string: value)
-    }
+    fileprivate func box(_ value: String) -> NSObject { return NSString(string: value) }
     
     fileprivate func box(_ float: Float) throws -> NSObject {
         // 对于一些特殊值, 需要直接抛出错误.
@@ -675,36 +674,36 @@ extension _JSONEncoder {
         return NSNumber(value: double)
     }
     
-    fileprivate func boxDate(_ date: Date) throws -> NSObject {
+    // 日期的序列化方法, 在这里, 使用到了 JSONEncoder 的各种配置.
+    fileprivate func box(_ date: Date) throws -> NSObject {
         switch self.options.dateEncodingStrategy {
         case .deferredToDate:
-            // 为什么, 被序列化的对象, 实现 public func encode(to encoder: Encoder) throws
-            // 方法, 就会被调用的原因
-            // 因为, 逻辑类, 主动调用了他们的 encode 方法.
-            // 对于, 不是 Dict, Array 的数据, encode 的过程, 会有一次 container 的入栈的过程. pop 恢复栈的状态, 并且返回刚刚生成的数据.
             try date.encode(to: self)
             return self.storage.popContainer()
-        // 其他的 dateFormat 的 case, 就是按照 Case 的要求, 进行对应的字符串操作.
+            
         case .secondsSince1970:
             return NSNumber(value: date.timeIntervalSince1970)
+            
         case .millisecondsSince1970:
             return NSNumber(value: 1000.0 * date.timeIntervalSince1970)
+            
         case .iso8601:
             if #available(macOS 10.12, iOS 10.0, watchOS 3.0, tvOS 10.0, *) {
                 return NSString(string: _iso8601Formatter.string(from: date))
             } else {
                 fatalError("ISO8601DateFormatter is unavailable on this platform.")
             }
+            
         case .formatted(let formatter):
+            // 根据传递过来的 formatter 进行转化,  这里, 体现了枚举的类型存储特性.
             return NSString(string: formatter.string(from: date))
-        
+            
         case .custom(let closure):
             let depth = self.storage.count
             do {
                 try closure(date, self)
             } catch {
                 // If the value pushed a container before throwing, pop it back off to restore state.
-                // 当发生了错误的时候, 恢复数据到错误发生前的状态.
                 if self.storage.count > depth {
                     let _ = self.storage.popContainer()
                 }
@@ -721,7 +720,7 @@ extension _JSONEncoder {
         }
     }
     
-    fileprivate func boxData(_ data: Data) throws -> NSObject {
+    fileprivate func box(_ data: Data) throws -> NSObject {
         switch self.options.dataEncodingStrategy {
         case .deferredToData:
             // Must be called with a surrounding with(pushedKey:) call.
@@ -729,6 +728,8 @@ extension _JSONEncoder {
             do {
                 try data.encode(to: self)
             } catch {
+                // If the value pushed a container before throwing, pop it back off to restore state.
+                // This shouldn't be possible for Data (which encodes as an array of bytes), but it can't hurt to catch a failure.
                 if self.storage.count > depth {
                     let _ = self.storage.popContainer()
                 }
@@ -736,8 +737,9 @@ extension _JSONEncoder {
             }
             return self.storage.popContainer()
             
-        // 用 base 64 的方式, 表示 data. base 64 是一个通用的表示二进制数据的方式.
+            
         case .base64:
+            // Base 64
             return NSString(string: data.base64EncodedString())
             
         case .custom(let closure):
@@ -761,7 +763,7 @@ extension _JSONEncoder {
         }
     }
     
-    fileprivate func boxDict(_ dict: [String : Encodable]) throws -> NSObject? {
+    fileprivate func box(_ dict: [String : Encodable]) throws -> NSObject? {
         let depth = self.storage.count
         // result 就是一个字典.
         let result = self.storage.pushKeyedContainer()
@@ -790,36 +792,43 @@ extension _JSONEncoder {
         return self.storage.popContainer()
     }
     
-    
+    // 如果是一个可 Encodable 的对象, 有着更加特殊的设计.
     fileprivate func box(_ value: Encodable) throws -> NSObject {
-        return try self.boxObject(value) ?? NSDictionary()
+        return try self.box_(value) ?? NSDictionary()
     }
     
-    // 这个函数, 是将 Encodable 对象, 变为符合 JSON 格式的对象.
-    fileprivate func boxObject(_ value: Encodable) throws -> NSObject? {
-        let type = Swift.type(of: value)
+    // 各个类型, 需要实现 Codable 的原因在这里.
+    fileprivate func box_(_ value: Encodable) throws -> NSObject? {
         
+        let type = Swift.type(of: value)
+        // 对于一些特殊的类型, 有着专门的处理方式.
         if type == Date.self {
-            return try self.boxDate((value as! Date))
+            // Respect Date encoding strategy
+            return try self.box((value as! Date))
         } else if type == Data.self {
-            return try self.boxData((value as! Data))
+            // Respect Data encoding strategy
+            return try self.box((value as! Data))
         } else if type == URL.self {
-            return self.boxString((value as! URL).absoluteString)
+            // Encode URLs as single strings.
+            return self.box((value as! URL).absoluteString)
         } else if type == Decimal.self {
+            // JSONSerialization can consume NSDecimalNumber values.
             return NSDecimalNumber(decimal: value as! Decimal)
         } else if value is _JSONStringDictionaryEncodableMarker {
             // extension Dictionary : _JSONStringDictionaryEncodableMarker where Key == String, Value: Encodable { }
             // 对于 Dict, 专门设计了一个协议. 注意 _JSONStringDictionaryEncodableMarker 是一个空协议
             // Swift 有很多这种空协议, 为的就是类型的识别. 而且, 是用的泛型的限制进行的识别. 这样代码有了很强的灵活性.
-            return try boxDict(value as! [String : Encodable])
+            return try box(value as! [String : Encodable])
         }
         
-        // 不是上面的几个, JSON 可以直接关联的类型, 就要调用自定义对象的 encode 方法了.
+        // Encodable类型, 如果不在上面的几个类型里面, 这里执行 encode 方法, 这个过程里面, Json 序列化的层级可能会变化.
         let depth = self.storage.count
         do {
+            // 这里就调用了各个类型的 encode to coder 方法了
             try value.encode(to: self)
         } catch {
             // If the value pushed a container before throwing, pop it back off to restore state.
+            // 如果发生了错误, 回复 storage 的层级. 注意, 这里回复了之后, 还会 throw.
             if self.storage.count > depth {
                 let _ = self.storage.popContainer()
             }
@@ -1026,8 +1035,7 @@ open class JSONDecoder {
     /// Initializes `self` with default strategies.
     public init() {}
     
-    open func decode<T : Decodable>(_ type: T.Type,
-                                    from data: Data) throws -> T {
+    open func decode<T : Decodable>(_ type: T.Type, from data: Data) throws -> T {
         let topLevel: Any
         // 首先, 是根据 JSONSerialization 进行反序列化, 然后 _JSONDecoder 将数据从基本数据类型, 转化到对应的数据类型.
         do {
@@ -1036,9 +1044,8 @@ open class JSONDecoder {
             throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: [], debugDescription: "The given data was not valid JSON.", underlyingError: error))
         }
         
-        let decoder = _JSONDecoder(referencing: topLevel,
-                                   options: self.options)
-        // 从 NSArray, NSDict 中, 构建 type 的过程.
+        let decoder = _JSONDecoder(referencing: topLevel, options: self.options)
+        // Unbox 里面, 会根据 Type, 进行对应的 container 的创建.
         guard let value = try decoder.unbox(topLevel, as: type) else {
             throw DecodingError.valueNotFound(type, DecodingError.Context(codingPath: [], debugDescription: "The given data did not contain a top-level value."))
         }
@@ -1078,8 +1085,29 @@ fileprivate class _JSONDecoder : Decoder {
     
     // MARK: - Decoder Methods
     
+    /*
+     应该用 keyvalue 存储, array 存储, 还是单值存储, 这是各个 Value 决定的.
+     各个 Value 如何表示自己的数据, 要和自己的数据结构相关. 比如, 对于 NSDate 来说, 就是一个时间戳, 那么选用单值存储, 是说的过去的.
+     虽然是单值存储, 但是它的上级, 可能是使用 key, value 的形式, value 是一个单值. NSDate 的 encode 方法, 仅仅能够影响 Value 的部分, 它如何被上级存储, 是上级决定的.
+     例如, point 这个值
+     keyvalue 形式 x: 100, y: 100
+     array 形式, [100, 200]
+     单值形式 10000100 -> x* 100000 + y
+     这些都仅仅影响的是, 这个值怎么表现的. 例如, point 是在 circle 里面, circle 还有一个 radius 值. 下面是 circle 的存储.
+     keyvalue 形式
+     {
+     radius: 300
+     center: keyvalue {x: 100, y: 100}
+     array [100, 100]
+     单值 10000100
+     }
+     array 形式
+     [300, {x: 100, y: 100}, 或者 [100, 100], 或者 10000100]
+     单值形式
+     r * 1000000 + point 的单值 30010000100
+     */
     
-    public func container<Key>(keyedBy KeyName: Key.Type) throws -> KeyedDecodingContainer<Key> {
+    public func container<Key>(keyedBy type: Key.Type) throws -> KeyedDecodingContainer<Key> {
         guard !(self.storage.topContainer is NSNull) else {
             throw DecodingError.valueNotFound(KeyedDecodingContainer<Key>.self,
                                               DecodingError.Context(codingPath: self.codingPath,
@@ -1090,8 +1118,7 @@ fileprivate class _JSONDecoder : Decoder {
             throw DecodingError._typeMismatch(at: self.codingPath, expectation: [String : Any].self, reality: self.storage.topContainer)
         }
         
-        let container = _JSONKeyedDecodingContainer<Key>(referencing: self,
-                                                         wrapping: topContainer)
+        let container = _JSONKeyedDecodingContainer<Key>(referencing: self, wrapping: topContainer)
         return KeyedDecodingContainer(container)
     }
     
@@ -1213,6 +1240,15 @@ fileprivate struct _JSONKeyedDecodingContainer<K : CodingKey> : KeyedDecodingCon
         }
     }
     
+    
+    /*
+     KeyContainer 的解码过程
+     就是通过 key, 从 Dict 里面取值. 然后将这个值, 转化成为传递过来的 Type 的过程.
+     这个过程中, Type 一定是确定的. 这就是为什么参数需要带 Type 的原因.
+     OC 里面, 也是这样做的, 不过是 OC 里面, Type 的得到, 是根据 Runtime.
+     
+     最终, 还是到了单个值的 Unbox 里面.
+    */
     public func decodeNil(forKey key: Key) throws -> Bool {
         guard let entry = self.container[key.stringValue] else {
             throw DecodingError.keyNotFound(key, DecodingError.Context(codingPath: self.decoder.codingPath, debugDescription: "No value associated with key \(_errorDescription(of: key))."))
@@ -1417,7 +1453,6 @@ fileprivate struct _JSONKeyedDecodingContainer<K : CodingKey> : KeyedDecodingCon
     }
     
     public func decode(_ type: String.Type, forKey key: Key) throws -> String {
-        // 使用的是 key.stringValue, 所以, 这里也会使用到我们改名后的 string
         guard let entry = self.container[key.stringValue] else {
             throw DecodingError.keyNotFound(key, DecodingError.Context(codingPath: self.decoder.codingPath, debugDescription: "No value associated with key \(_errorDescription(of: key))."))
         }
@@ -1432,9 +1467,7 @@ fileprivate struct _JSONKeyedDecodingContainer<K : CodingKey> : KeyedDecodingCon
         return value
     }
     
-    // 按照 key, 获取到对应的 JSON 对象之后, 转化为 T 的过程.
     public func decode<T : Decodable>(_ type: T.Type, forKey key: Key) throws -> T {
-        // 先从 Json 对象里面, 按照 key 获取到对应的下一层 JSON 对象.
         guard let entry = self.container[key.stringValue] else {
             throw DecodingError.keyNotFound(key, DecodingError.Context(codingPath: self.decoder.codingPath, debugDescription: "No value associated with key \(_errorDescription(of: key))."))
         }
@@ -1449,7 +1482,8 @@ fileprivate struct _JSONKeyedDecodingContainer<K : CodingKey> : KeyedDecodingCon
         return value
     }
     
-    public func nestedContainer<NestedKey>(keyedBy type: NestedKey.Type, forKey key: Key) throws -> KeyedDecodingContainer<NestedKey> {
+    public func nestedContainer<NestedKey>(keyedBy type: NestedKey.Type,
+                                           forKey key: Key) throws -> KeyedDecodingContainer<NestedKey> {
         self.decoder.codingPath.append(key)
         defer { self.decoder.codingPath.removeLast() }
         
@@ -2205,7 +2239,7 @@ extension _JSONDecoder {
     }
     
     // 如果 unbox 不成功, 默认是 throw error 的.
-    fileprivate func unboxDate(_ value: Any, as type: Date.Type) throws -> Date? {
+    fileprivate func unbox(_ value: Any, as type: Date.Type) throws -> Date? {
         
         guard !(value is NSNull) else { return nil }
         
@@ -2287,7 +2321,6 @@ extension _JSONDecoder {
         }
     }
     
-    // Dict 的反序列化
     fileprivate func unbox<T>(_ value: Any, as type: _JSONStringDictionaryDecodableMarker.Type) throws -> T? {
         guard !(value is NSNull) else { return nil }
         
@@ -2306,8 +2339,7 @@ extension _JSONDecoder {
         return result as? T
     }
     
-    fileprivate func unbox<T : Decodable>(_ value: Any,
-                                          as type: T.Type) throws -> T? {
+    fileprivate func unbox<T : Decodable>(_ value: Any, as type: T.Type) throws -> T? {
         return try unbox_(value, as: type) as? T
     }
     
@@ -2315,7 +2347,7 @@ extension _JSONDecoder {
     fileprivate func unbox_(_ value: Any, as type: Decodable.Type) throws -> Any? {
         // 所以, 最终还是根据参数, 作为 Type 的分发器.
         if type == Date.self || type == NSDate.self {
-            return try self.unboxDate(value, as: Date.self)
+            return try self.unbox(value, as: Date.self)
         } else if type == Data.self || type == NSData.self {
             return try self.unbox(value, as: Data.self)
         } else if type == URL.self || type == NSURL.self {
@@ -2333,10 +2365,9 @@ extension _JSONDecoder {
         } else if let stringKeyedDictType = type as? _JSONStringDictionaryDecodableMarker.Type {
             return try self.unbox(value, as: stringKeyedDictType)
         } else {
-            // type 不是上面的 JSON 关联的类型, 那么使用各个类自己定义的 init 方法, 进行初始化.
-            // 所以, 这里对象的创建, 还是要构建的过程.
             self.storage.push(container: value)
             defer { self.storage.popContainer() }
+            // 调用了各个类型需要实现的 INIT 方法.
             return try type.init(from: self)
         }
     }

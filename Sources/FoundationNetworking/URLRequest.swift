@@ -3,35 +3,33 @@ import SwiftFoundation
 #else
 import Foundation
 #endif
+
 // ReferenceConvertible
 // A decoration applied to types that are backed by a Foundation reference type.
 // AssociateType ReferenceType
-// 这个协议, 只有一个 AssociateType, 不过它的意思是, 我里面存储其实是用一个指针存储的. 所以, 如果一个结构体符合这个协议, 要考虑别名问题.
-// 但是, 如果里面是一个不可变的对象, 那么这个指针传递就没有问题了.
+/*
+ 这样的一个协议, 标明的是, 实际的成员变量, 是一个 Foundation 的 NSObject 对象.
+ 一般来说, 是 struct 来完成这个协议.
+ 这个协议, 没有任何的方法定义, 但是更好的表现出了 struct 的内在组成
+ */
 
 public struct URLRequest : ReferenceConvertible, Equatable, Hashable {
+    
     public typealias ReferenceType = NSURLRequest
     public typealias CachePolicy = NSURLRequest.CachePolicy
     public typealias NetworkServiceType = NSURLRequest.NetworkServiceType
     
-    /*
-     NSURLRequest has a fragile ivar layout that prevents the swift subclass approach here, so instead we keep an always mutable copy
-     */
     // 这里没有初始化. 所以 init 方法里面, 要初始化.
     internal var _handle: _MutableHandle<NSMutableURLRequest>
     
-    // 传入一个闭包, 类型是 (NSMutableURLRequest) -> ReturnType)
-    // 返回一个值, 类型是 ReturnType
-    // 也就是, 传入的闭包返回什么类型值, 函数就返回什么类型值. 这种写法在 Swfit 里面很常见. 例如 pointer 那里.
-    // 这种, _applyMutation 方法, 是管理了指针的 struct 方法里面, 一定要有的. set 方法, 一定要检查指针的唯一性.
+    // 所有的 set 方法, 都会使用该函数.
+    // 将真正的 set 操作, 包装一层.
+    /* 这里, 其实是让 handle 和 里面的 pointer 保持一对一的关系.
+        在复制 URLRequest 的时候, 其实是复制的 _handle 的值, 也就是 _handle 的引用.
+        如果, _handle 不是 uniqueRef 的, 那么它里面的 request 也就是不是 uniqueRef 的.
+        因为在初始化 _handle 的时候, 会对相应的 NSMutableRequest 做 Copy 动作, 保证, _handle 里面的 URLRequest 是一份独立的数据.
+    */
     internal mutating func _applyMutation<ReturnType>(_ whatToDo : (NSMutableURLRequest) -> ReturnType) -> ReturnType {
-        // 这里不太理解, _handle 仅仅是一个盒子而已, 新创建了一个盒子?
-        // 这里是为了保持值语义. _handle 是一个引用值, 它里面引用另外一个值. 但是, 它是整个 struct 的值. 当 set 的时候, struct 的值发生了改变, 也就是 _handle 的值发生了改变. 但是, 改变后的 _handle 还是保持原来的 NSMutableURLRequest 的引用.
-        // 实在感觉多此一举啊.
-        // 不对.
-        // 这里, URLRequest 可以传递给别人, 那么 _handle 就被两个值共享.
-        // 一旦一个进行 set, 那么就会有别名问题. 这里, _handle 仅仅是个盒子, 但是 _MutableHandle(reference: ref) 里面, 会有一次 copy 的调用, 让 ref 也进行一次 copy
-        // 一般情况下, struct 管理指针, 直接调用指针的 copy, 这里因为有这个盒子的原因, 饶了一圈.
         if !isKnownUniquelyReferenced(&_handle) {
             let ref = _handle._uncopiedReference()
             _handle = _MutableHandle(reference: ref)
@@ -39,25 +37,24 @@ public struct URLRequest : ReferenceConvertible, Equatable, Hashable {
         return whatToDo(_handle._uncopiedReference())
     }
     
-    /// Creates and initializes a URLRequest with the given URL and cache policy.
-    /// - parameter url: The URL for the request.
-    /// - parameter cachePolicy: The cache policy for the request. Defaults to `.useProtocolCachePolicy`
-    /// - parameter timeoutInterval: The timeout interval for the request. See the commentary for the `timeoutInterval` for more information on timeout intervals. Defaults to 60.0
+    // 新生成一个单独的 NSMutableURLRequest, 然后构造出 _handle 来.
     public init(url: URL, cachePolicy: CachePolicy = .useProtocolCachePolicy, timeoutInterval: TimeInterval = 60.0) {
-        // 首先, 生成一个NSMutableURLRequest, 然后用来初始化一个 _MutableHandle.
-        // 这里, 新生成的 NSMutableURLRequest 一定不会被其他地方引用, 所以内部不用调用 copy.
         _handle = _MutableHandle(adoptingReference:
                                     NSMutableURLRequest(url: url, cachePolicy: cachePolicy, timeoutInterval: timeoutInterval))
     }
     
-    // 这里, bridge, 其实就是利用对方, 来初始化一个本类的对象.
-    // 因为是两个对象, 所以一定要 copy 一次进行切割.
-    // 这里调用了两次 copy, 不太好.
+    // _bridged request 这种 init 函数, 应该就是系统桥接的时候, 调用的 init 函数.
+    // 所以, 桥接, 实际上就是利用一种 Type 值, copy 出对应版本的另外一种 Type 值. 并不是免费的.
     fileprivate init(_bridged request: NSURLRequest) {
         _handle = _MutableHandle(reference: request.mutableCopy() as! NSMutableURLRequest)
     }
     
-    /// The URL of the receiver.
+    /*
+        所有的 get, 都是从 _handle 里面, 取到 NSMutableRequest 的相应值.
+        Swfit 里面, 根据闭包值, 来确定函数的返回值, 让函数的作用性大大提高了. 用 OC, 或者 C++, 必须写大量的代理方法.
+        所有的 set, 都包装在 _applyMutation 里面, 使得 _handle 和它管理的内部 _pointer, 是 uniqueRef 的.
+     */
+    
     public var url: URL? {
         get {
             return _handle.map { $0.url }
@@ -67,7 +64,6 @@ public struct URLRequest : ReferenceConvertible, Equatable, Hashable {
         }
     }
     
-    /// The cache policy of the receiver.
     public var cachePolicy: CachePolicy {
         get {
             return _handle.map { $0.cachePolicy }
@@ -77,22 +73,8 @@ public struct URLRequest : ReferenceConvertible, Equatable, Hashable {
         }
     }
 
-    //URLRequest.timeoutInterval should be given precedence over the URLSessionConfiguration.timeoutIntervalForRequest regardless of the value set,
-    // if it has been set at least once. Even though the default value is 60 ,if the user sets URLRequest.timeoutInterval
-    // to explicitly 60 then the precedence should be given to URLRequest.timeoutInterval.
     internal var isTimeoutIntervalSet = false
     
-    /// Returns the timeout interval of the receiver.
-    /// - discussion: The timeout interval specifies the limit on the idle
-    /// interval allotted to a request in the process of loading. The "idle
-    /// interval" is defined as the period of time that has passed since the
-    /// last instance of load activity occurred for a request that is in the
-    /// process of loading. Hence, when an instance of load activity occurs
-    /// (e.g. bytes are received from the network for a request), the idle
-    /// interval for a request is reset to 0. If the idle interval ever
-    /// becomes greater than or equal to the timeout interval, the request
-    /// is considered to have timed out. This timeout interval is measured
-    /// in seconds.
     public var timeoutInterval: TimeInterval {
         get {
             return _handle.map { $0.timeoutInterval }
@@ -103,9 +85,6 @@ public struct URLRequest : ReferenceConvertible, Equatable, Hashable {
         }
     }
     
-    /// The main document URL associated with this load.
-    /// - discussion: This URL is used for the cookie "same domain as main
-    /// document" policy.
     public var mainDocumentURL: URL? {
         get {
             return _handle.map { $0.mainDocumentURL }
@@ -115,9 +94,6 @@ public struct URLRequest : ReferenceConvertible, Equatable, Hashable {
         }
     }
     
-    /// The URLRequest.NetworkServiceType associated with this request.
-    /// - discussion: This will return URLRequest.NetworkServiceType.default for requests that have
-    /// not explicitly set a networkServiceType
     public var networkServiceType: NetworkServiceType {
         get {
             return _handle.map { $0.networkServiceType }
@@ -127,8 +103,6 @@ public struct URLRequest : ReferenceConvertible, Equatable, Hashable {
         }
     }
     
-    /// `true` if the receiver is allowed to use the built in cellular radios to
-    /// satisfy the request, `false` otherwise.
     public var allowsCellularAccess: Bool {
         get {
             return _handle.map { $0.allowsCellularAccess }
@@ -138,7 +112,6 @@ public struct URLRequest : ReferenceConvertible, Equatable, Hashable {
         }
     }
     
-    /// The HTTP request method of the receiver.
     public var httpMethod: String? {
         get {
             return _handle.map { $0.httpMethod }
@@ -154,8 +127,6 @@ public struct URLRequest : ReferenceConvertible, Equatable, Hashable {
         }
     }
     
-    /// A dictionary containing all the HTTP header fields of the
-    /// receiver.
     public var allHTTPHeaderFields: [String : String]? {
         get {
             return _handle.map { $0.allHTTPHeaderFields }
@@ -165,39 +136,22 @@ public struct URLRequest : ReferenceConvertible, Equatable, Hashable {
         }
     }
     
-    /// The value which corresponds to the given header
-    /// field. Note that, in keeping with the HTTP RFC, HTTP header field
-    /// names are case-insensitive.
-    /// - parameter field: the header field name to use for the lookup (case-insensitive).
     public func value(forHTTPHeaderField field: String) -> String? {
         return _handle.map { $0.value(forHTTPHeaderField: field) }
     }
     
-    /// If a value was previously set for the given header
-    /// field, that value is replaced with the given value. Note that, in
-    /// keeping with the HTTP RFC, HTTP header field names are
-    /// case-insensitive.
     public mutating func setValue(_ value: String?, forHTTPHeaderField field: String) {
         _applyMutation {
             $0.setValue(value, forHTTPHeaderField: field)
         }
     }
     
-    /// This method provides a way to add values to header
-    /// fields incrementally. If a value was previously set for the given
-    /// header field, the given value is appended to the previously-existing
-    /// value. The appropriate field delimiter, a comma in the case of HTTP,
-    /// is added by the implementation, and should not be added to the given
-    /// value by the caller. Note that, in keeping with the HTTP RFC, HTTP
-    /// header field names are case-insensitive.
     public mutating func addValue(_ value: String, forHTTPHeaderField field: String) {
         _applyMutation {
             $0.addValue(value, forHTTPHeaderField: field)
         }
     }
     
-    /// This data is sent as the message body of the request, as
-    /// in done in an HTTP POST request.
     public var httpBody: Data? {
         get {
             return _handle.map { $0.httpBody }
@@ -207,12 +161,6 @@ public struct URLRequest : ReferenceConvertible, Equatable, Hashable {
         }
     }
     
-    /// The stream is returned for examination only; it is
-    /// not safe for the caller to manipulate the stream in any way.  Also
-    /// note that the HTTPBodyStream and HTTPBody are mutually exclusive - only
-    /// one can be set on a given request.  Also note that the body stream is
-    /// preserved across copies, but is LOST when the request is coded via the
-    /// NSCoding protocol
     public var httpBodyStream: InputStream? {
         get {
             return _handle.map { $0.httpBodyStream }
@@ -222,7 +170,6 @@ public struct URLRequest : ReferenceConvertible, Equatable, Hashable {
         }
     }
     
-    /// `true` if cookies will be sent with and set for this request; otherwise `false`.
     public var httpShouldHandleCookies: Bool {
         get {
             return _handle.map { $0.httpShouldHandleCookies }
@@ -232,9 +179,6 @@ public struct URLRequest : ReferenceConvertible, Equatable, Hashable {
         }
     }
     
-    /// `true` if the receiver should transmit before the previous response
-    /// is received.  `false` if the receiver should wait for the previous response
-    /// before transmitting.
     public var httpShouldUsePipelining: Bool {
         get {
             return _handle.map { $0.httpShouldUsePipelining }
@@ -248,6 +192,7 @@ public struct URLRequest : ReferenceConvertible, Equatable, Hashable {
         hasher.combine(_handle.map { $0 })
     }
     
+    // struct 里面如果有引用值, 直接使用引用值进行判等.
     public static func ==(lhs: URLRequest, rhs: URLRequest) -> Bool {
         return lhs._handle._uncopiedReference().isEqual(rhs._handle._uncopiedReference())
     }
@@ -275,7 +220,7 @@ extension URLRequest : CustomStringConvertible, CustomDebugStringConvertible, Cu
         return self.description
     }
 
-    // 这个, 之后再去理解.
+    // mirror, 由各个类, 来决定如何暴露自己的内部数据.
     public var customMirror: Mirror {
         var c: [(label: String?, value: Any)] = []
         c.append((label: "url", value: url as Any))
@@ -300,26 +245,20 @@ extension URLRequest : _ObjectiveCBridgeable {
         return NSURLRequest.self
     }
 
-    // 返回, 对应的 OC 对象.
-    // 所以, Swift 和 OC 的转化, 其实要有对应的 alloc, init 的.
-    // 但是, 如果是这种, 藏指针的方式, 会方便很多.
-    @_semantics("convertToObjectiveC")
+    // 这里返回的是 copy 之后的, 将原始数据和目标数据, 进行了切分.
     public func _bridgeToObjectiveC() -> NSURLRequest {
         return _handle._copiedReference()
     }
 
-    // 利用 oc 的对象, 生成一个自己.
     public static func _forceBridgeFromObjectiveC(_ input: NSURLRequest, result: inout URLRequest?) {
         result = URLRequest(_bridged: input)
     }
 
-    // 利用 oc 的对象, 生成一个自己.
     public static func _conditionallyBridgeFromObjectiveC(_ input: NSURLRequest, result: inout URLRequest?) -> Bool {
         result = URLRequest(_bridged: input)
         return true
     }
 
-    // 利用 oc 的对象, 生成一个自己.
     public static func _unconditionallyBridgeFromObjectiveC(_ source: NSURLRequest?) -> URLRequest {
         var result: URLRequest? = nil
         _forceBridgeFromObjectiveC(source!, result: &result)

@@ -1,12 +1,12 @@
 /*      CFBundle.c
-	Copyright (c) 1999-2019, Apple Inc. and the Swift project authors
+ Copyright (c) 1999-2019, Apple Inc. and the Swift project authors
  
-	Portions Copyright (c) 2014-2019, Apple Inc. and the Swift project authors
-	Licensed under Apache License v2.0 with Runtime Library Exception
-	See http://swift.org/LICENSE.txt for license information
-	See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-        Responsibility: Tony Parker
-*/
+ Portions Copyright (c) 2014-2019, Apple Inc. and the Swift project authors
+ Licensed under Apache License v2.0 with Runtime Library Exception
+ See http://swift.org/LICENSE.txt for license information
+ See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
+ Responsibility: Tony Parker
+ */
 
 #include "CFBundle_Internal.h"
 #include <CoreFoundation/CFPropertyList.h>
@@ -149,10 +149,10 @@ static Boolean _CFBundleURLIsForFHSInstalledBundle(CFURLRef bundleURL) {
     CFStringRef containingDirectoryName = parentURL ? CFURLCopyLastPathComponent(parentURL) : NULL;
     
     Boolean isFHSBundle =
-        extension &&
-        containingDirectoryName &&
-        CFEqual(extension, _CFBundleSiblingResourceDirectoryExtension) &&
-        CFEqual(containingDirectoryName, _CFBundleFHSDirectory_share);
+    extension &&
+    containingDirectoryName &&
+    CFEqual(extension, _CFBundleSiblingResourceDirectoryExtension) &&
+    CFEqual(containingDirectoryName, _CFBundleFHSDirectory_share);
     
     if (extension) CFRelease(extension);
     if (parentURL) CFRelease(parentURL);
@@ -223,7 +223,7 @@ static void _CFBundleAddToTables(CFBundleRef bundle) {
     if (bundle->_isUnique) return;
     
     CFStringRef bundleID = CFBundleGetIdentifier(bundle);
-
+    
     _CFMutexLock(&CFBundleGlobalDataLock);
     
     // Add to the _allBundles list
@@ -250,7 +250,7 @@ static void _CFBundleAddToTables(CFBundleRef bundle) {
         _bundlesByURL = CFDictionaryCreateMutable(kCFAllocatorSystemDefault, 0, &kCFTypeDictionaryKeyCallBacks, &nonRetainingDictionaryValueCallbacks);
     }
     CFDictionarySetValue(_bundlesByURL, bundle->_url, bundle);
-
+    
     // Add to the table that maps identifiers to bundles
     if (bundleID) {
         CFMutableArrayRef bundlesWithThisID = NULL;
@@ -269,7 +269,7 @@ static void _CFBundleAddToTables(CFBundleRef bundle) {
                 if (newVersion >= existingVersion) break;
             }
             CFArrayInsertValueAtIndex(bundlesWithThisID, i, bundle);
-
+            
             // We've encountered a bundle with this ID already.
             // Output some additional info here. It may not be an error (adding a newer version of a bundle is supported), so use os_log_debug.
             os_log_debug(_CFBundleResourceLogger(), "More than one bundle with the same identifier has been added: %{public}@", bundlesWithThisID);
@@ -443,7 +443,7 @@ CF_EXPORT CFBundleRef _CFBundleCreateIfMightBeBundle(CFAllocatorRef allocator, C
     CFBundleRef bundle = CFBundleCreate(allocator, url);
     return bundle;
 }
-        
+
 CF_EXPORT void _CFBundleFlushBundleCaches(CFBundleRef bundle) {
     __CFLock(&bundle->_lock);
     CFDictionaryRef oldInfoDict = bundle->_infoDict;
@@ -516,7 +516,7 @@ CFBundleRef CFBundleGetBundleWithIdentifier(CFStringRef bundleID) {
                         imagePath = _CFBundleCopyLoadedImagePathForPointer(p);
                     }
                 }
-            
+                
                 if (imagePath) {
                     // As this is a fast-path check, we don't want to be aggressive about assuming that the executable URL that we may have received from DYLD via _CFBundleCopyLoadedImagePathForPointer should be turned into a framework URL. If we do, then it is possible that an executable located inside a framework bundle which does not normally link that framework will cause us to load it unintentionally (31165928).
                     // For example:
@@ -547,11 +547,11 @@ CFBundleRef CFBundleGetBundleWithIdentifier(CFStringRef bundleID) {
     if (!result) {
         // Make sure all bundles have been created and try again.
         _CFBundleEnsureAllBundlesUpToDate();
-
+        
         // Now try again
         result = _CFBundleGetFromTables(bundleID);
     }
-
+    
     return result;
 }
 
@@ -602,7 +602,7 @@ static void __CFBundleDeallocate(CFTypeRef cf) {
     if (bundle->_infoDict) bundleID = (CFStringRef)CFDictionaryGetValue(bundle->_infoDict, kCFBundleIdentifierKey);
     _CFBundleRemoveFromTables(bundle, bundleURL, bundleID);
     CFBundleUnloadExecutable(bundle);
-    _CFBundleDeallocatePlugIn(bundle);    
+    _CFBundleDeallocatePlugIn(bundle);
     if (bundleURL) {
         CFRelease(bundleURL);
     }
@@ -634,7 +634,7 @@ const CFRuntimeClass __CFBundleClass = {
     __CFBundleDeallocate,
     NULL,      // equal
     NULL,      // hash
-    NULL,      // 
+    NULL,      //
     __CFBundleCopyDescription
 };
 
@@ -660,7 +660,7 @@ CFBundleRef _CFBundleGetExistingBundleWithBundleURL(CFURLRef bundleURL) {
         CFRelease(newURL);
         return main;
     }
-
+    
     bundle = _CFBundleCopyFromTablesForURL(newURL);
     if (bundle) CFRelease(bundle);
     CFRelease(newURL);
@@ -676,7 +676,7 @@ static CFBundleRef _CFBundleCreate(CFAllocatorRef allocator, CFURLRef bundleURL,
     uint8_t localVersion = 0;
     
     if (!CFURLGetFileSystemRepresentation(bundleURL, true, (uint8_t *)buff, CFMaxPathSize)) return NULL;
-
+    
     newURL = CFURLCreateFromFileSystemRepresentation(allocator, (uint8_t *)buff, strlen(buff), true);
     if (!newURL) newURL = (CFURLRef)CFRetain(bundleURL);
     
@@ -702,21 +702,21 @@ static CFBundleRef _CFBundleCreate(CFAllocatorRef allocator, CFURLRef bundleURL,
             return NULL;
         }
     }
-
+    
     bundle = (CFBundleRef)_CFRuntimeCreateInstance(allocator, CFBundleGetTypeID(), sizeof(struct __CFBundle) - sizeof(CFRuntimeBase), NULL);
     if (!bundle) {
         CFRelease(newURL);
         return NULL;
     }
-
+    
     bundle->_url = newURL;
     
 #if !DEPLOYMENT_RUNTIME_OBJC && !TARGET_OS_WIN32 && !TARGET_OS_ANDROID
     bundle->_isFHSInstalledBundle = _CFBundleURLIsForFHSInstalledBundle(newURL);
 #endif
-
+    
     bundle->_version = localVersion;
-
+    
 #if defined(BINARY_SUPPORT_DYLD)
     /* We'll have to figure it out later */
     bundle->_binaryType = __CFBundleUnknownBinary;
@@ -727,20 +727,20 @@ static CFBundleRef _CFBundleCreate(CFAllocatorRef allocator, CFURLRef bundleURL,
     /* We'll have to figure it out later */
     bundle->_binaryType = __CFBundleUnknownBinary;
 #endif /* BINARY_SUPPORT_DYLD */
-
+    
     bundle->_isUnique = unique;
     
 #if TARGET_OS_MAC
-    if (!__CFgetenv("CFBundleDisableStringsSharing") && 
-        (strncmp(buff, "/System/Library/Frameworks", 26) == 0) && 
+    if (!__CFgetenv("CFBundleDisableStringsSharing") &&
+        (strncmp(buff, "/System/Library/Frameworks", 26) == 0) &&
         (strncmp(buff + strlen(buff) - 10, ".framework", 10) == 0)) bundle->_sharesStringsFiles = true;
 #endif
-
+    
     _CFMutexCreate(&(bundle->_bundleLoadingLock));
-
+    
     bundle->_lock = CFLockInit;
     bundle->_queryLock = CFLockInit;
-
+    
     CFURLRef absoURL = CFURLCopyAbsoluteURL(bundle->_url);
     bundle->_bundleBasePath = CFURLCopyFileSystemPath(absoURL, PLATFORM_PATH_STYLE);
     CFRelease(absoURL);
@@ -751,7 +751,7 @@ static CFBundleRef _CFBundleCreate(CFAllocatorRef allocator, CFURLRef bundleURL,
     
     // Do this so that we can use the dispatch_once on the ivar of this bundle safely
     OSMemoryBarrier();
-
+    
     // _CFBundleCreateUnique will never load plugins
     if (!unique && doFinalProcessing) {
         // We have to do this before adding the bundle to the tables, otherwise another thread coming along and fetching the bundle will get the bundle ref but the factories for PlugIn have not yet been registered.
@@ -761,7 +761,7 @@ static CFBundleRef _CFBundleCreate(CFAllocatorRef allocator, CFURLRef bundleURL,
     if (addToTables) {
         _CFBundleAddToTables(bundle);
     }
-
+    
     if (doFinalProcessing) {
     }
     
@@ -770,7 +770,7 @@ static CFBundleRef _CFBundleCreate(CFAllocatorRef allocator, CFURLRef bundleURL,
 
 CFBundleRef CFBundleCreate(CFAllocatorRef allocator, CFURLRef bundleURL) {
     if (NULL == bundleURL) return NULL;
-
+    
     // _CFBundleCreate doesn't know about the main bundle, so we have to check that first. If the URL passed in is the same as the main bundle, then we'll need to return that bundle first.
     // Result will be nil if the bundleURL passed in happened to have been the main bundle.
     // As a fallback, check now to see if the main bundle URL is equal to bundleURL. If so, return that bundle instead of nil (32988858).
@@ -779,7 +779,7 @@ CFBundleRef CFBundleCreate(CFAllocatorRef allocator, CFURLRef bundleURL) {
         CFRetain(main);
         return main;
     }
-
+    
     return _CFBundleCreate(allocator, bundleURL, true, false, true);
 }
 
@@ -800,7 +800,7 @@ CFArrayRef CFBundleCreateBundlesFromDirectory(CFAllocatorRef alloc, CFURLRef dir
         CFIndex c = CFArrayGetCount(URLs);
         CFURLRef curURL;
         CFBundleRef curBundle;
-
+        
         for (CFIndex i = 0; i < c; i++) {
             curURL = (CFURLRef)CFArrayGetValueAtIndex(URLs, i);
             curBundle = CFBundleCreate(alloc, curURL);
@@ -814,7 +814,7 @@ CFArrayRef CFBundleCreateBundlesFromDirectory(CFAllocatorRef alloc, CFURLRef dir
         }
         CFRelease(URLs);
     }
-
+    
     return bundles;
 }
 
@@ -965,7 +965,7 @@ Boolean CFBundleIsExecutableLoaded(CFBundleRef bundle) {
 CFBundleExecutableType CFBundleGetExecutableType(CFBundleRef bundle) {
     CFBundleExecutableType result = kCFBundleOtherExecutableType;
     CFURLRef executableURL = CFBundleCopyExecutableURL(bundle);
-
+    
     if (!executableURL) bundle->_binaryType = __CFBundleNoBinary;
 #if defined(BINARY_SUPPORT_DYLD)
     if (bundle->_binaryType == __CFBundleUnknownBinary) {
@@ -974,7 +974,7 @@ CFBundleExecutableType CFBundleGetExecutableType(CFBundleRef bundle) {
     }
 #endif /* BINARY_SUPPORT_DYLD */
     if (executableURL) CFRelease(executableURL);
-
+    
     if (bundle->_binaryType == __CFBundleCFMBinary) {
         result = kCFBundlePEFExecutableType;
     } else if (bundle->_binaryType == __CFBundleDYLDExecutableBinary || bundle->_binaryType == __CFBundleDYLDBundleBinary || bundle->_binaryType == __CFBundleDYLDFrameworkBinary) {
@@ -982,7 +982,7 @@ CFBundleExecutableType CFBundleGetExecutableType(CFBundleRef bundle) {
     } else if (bundle->_binaryType == __CFBundleDLLBinary) {
         result = kCFBundleDLLExecutableType;
     } else if (bundle->_binaryType == __CFBundleELFBinary) {
-        result = kCFBundleELFExecutableType;    
+        result = kCFBundleELFExecutableType;
     }
     return result;
 }
@@ -1000,7 +1000,7 @@ static CFStringRef _CFBundleCopyLastPathComponent(CFBundleRef bundle) {
     CFStringRef str = CFURLCopyFileSystemPath(bundleURL, kCFURLPOSIXPathStyle);
     UniChar buff[CFMaxPathSize];
     CFIndex buffLen = CFStringGetLength(str), startOfLastDir = 0;
-
+    
     CFRelease(bundleURL);
     if (buffLen > CFMaxPathSize) buffLen = CFMaxPathSize;
     CFStringGetCharacters(str, CFRangeMake(0, buffLen), buff);
@@ -1104,8 +1104,8 @@ Boolean _CFBundleLoadExecutableAndReturnError(CFBundleRef bundle, Boolean forceG
     Boolean result = false;
     CFErrorRef localError = NULL, *subError = (error ? &localError : NULL);
     CFURLRef executableURL = CFBundleCopyExecutableURL(bundle);
-
-
+    
+    
     _CFMutexLock(&(bundle->_bundleLoadingLock));
     if (!executableURL) bundle->_binaryType = __CFBundleNoBinary;
     // make sure we know whether bundle is already loaded or not
@@ -1131,7 +1131,7 @@ Boolean _CFBundleLoadExecutableAndReturnError(CFBundleRef bundle, Boolean forceG
         _CFMutexUnlock(&CFBundleGlobalDataLock);
         return true;
     }
-
+    
     // Unload bundles scheduled for unloading
     if (!_scheduledBundlesAreUnloading) {
         _CFMutexUnlock(&(bundle->_bundleLoadingLock));
@@ -1148,7 +1148,7 @@ Boolean _CFBundleLoadExecutableAndReturnError(CFBundleRef bundle, Boolean forceG
         return true;
     }
     _CFMutexUnlock(&(bundle->_bundleLoadingLock));
-
+    
     switch (bundle->_binaryType) {
 #if defined(BINARY_SUPPORT_DLFCN)
         case __CFBundleUnreadableBinary:
@@ -1195,7 +1195,7 @@ Boolean _CFBundleLoadExecutableAndReturnError(CFBundleRef bundle, Boolean forceG
             } else {
                 CFLog(__kCFLogBundle, CFSTR("Cannot find executable for %@"), bundle);
             }
-            break;     
+            break;
         default:
             if (error) {
                 localError = _CFBundleCreateError(CFGetAllocator(bundle), bundle, CFBundleExecutableNotLoadableError);
@@ -1226,7 +1226,7 @@ Boolean CFBundlePreflightExecutable(CFBundleRef bundle, CFErrorRef *error) {
     CFErrorRef *subError = (error ? &localError : NULL);
 #endif
     CFURLRef executableURL = CFBundleCopyExecutableURL(bundle);
-
+    
     _CFMutexLock(&(bundle->_bundleLoadingLock));
     if (!executableURL) bundle->_binaryType = __CFBundleNoBinary;
     // make sure we know whether bundle is already loaded or not
@@ -1286,7 +1286,7 @@ Boolean CFBundlePreflightExecutable(CFBundleRef bundle, CFErrorRef *error) {
 #endif /* BINARY_SUPPORT_DLL */
         case __CFBundleNoBinary:
             if (error) localError = _CFBundleCreateError(CFGetAllocator(bundle), bundle, CFBundleExecutableNotFoundError);
-            break;     
+            break;
         default:
             if (error) localError = _CFBundleCreateError(CFGetAllocator(bundle), bundle, CFBundleExecutableNotLoadableError);
             break;
@@ -1310,7 +1310,7 @@ void CFBundleUnloadExecutable(CFBundleRef bundle) {
     if (!_scheduledBundlesAreUnloading) _CFBundleUnloadScheduledBundles();
     
     if (!bundle->_isLoaded) return;
-
+    
     // Remove from the scheduled unload set if we are there.
     if (!_scheduledBundlesAreUnloading) _CFMutexLock(&CFBundleGlobalDataLock);
     if (_bundlesToUnload) CFSetRemoveValue(_bundlesToUnload, bundle);
@@ -1318,14 +1318,14 @@ void CFBundleUnloadExecutable(CFBundleRef bundle) {
     
     // Give the plugIn code a chance to realize this...
     _CFPlugInWillUnload(bundle);
-
+    
     _CFMutexLock(&(bundle->_bundleLoadingLock));
     if (!bundle->_isLoaded) {
         _CFMutexUnlock(&(bundle->_bundleLoadingLock));
         return;
     }
     _CFMutexUnlock(&(bundle->_bundleLoadingLock));
-
+    
     switch (bundle->_binaryType) {
 #if defined(BINARY_SUPPORT_DYLD)
         case __CFBundleDYLDBundleBinary:
@@ -1418,7 +1418,7 @@ CF_PRIVATE Boolean _CFBundleCouldBeBundle(CFURLRef url) {
 }
 
 #define LENGTH_OF(A) (sizeof(A) / sizeof(A[0]))
-        
+
 //If 'permissive' is set, we will maintain the historical behavior of returning frameworks with names that don't match, and frameworks for executables in Resources/
 static CFURLRef __CFBundleCopyFrameworkURLForExecutablePath(CFStringRef executablePath, Boolean permissive) {
     // MF:!!! Implement me.  We need to be able to find the bundle from the exe, dealing with old vs. new as well as the Executables dir business on Windows.
@@ -1436,17 +1436,17 @@ static CFURLRef __CFBundleCopyFrameworkURLForExecutablePath(CFStringRef executab
     length = CFStringGetLength(executablePath);
     if (length > CFMaxPathSize) length = CFMaxPathSize;
     CFStringGetCharacters(executablePath, CFRangeMake(0, length), pathBuff);
-
+    
     // Save the name in nameBuff
     length = _CFLengthAfterDeletingPathExtension(pathBuff, length);
     nameStart = _CFStartOfLastPathComponent(pathBuff, length);
     nameLength = length - nameStart;
     memmove(nameBuff, &(pathBuff[nameStart]), nameLength * sizeof(UniChar));
-
+    
     // Strip the name from pathBuff
     length = _CFLengthAfterDeletingLastPathComponent(pathBuff, length);
     savedLength = length;
-
+    
 #if TARGET_OS_WIN32
     // * (Windows-only) First check the "Executables" directory parallel to the "Frameworks" directory case.
     if (_CFAppendPathComponent(pathBuff, &length, CFMaxPathSize, executablesToFrameworksPathBuff, LENGTH_OF(executablesToFrameworksPathBuff)) && _CFAppendPathComponent(pathBuff, &length, CFMaxPathSize, nameBuff, nameLength) && _CFAppendPathExtension(pathBuff, &length, CFMaxPathSize, frameworksExtension, LENGTH_OF(frameworksExtension))) {
@@ -1471,7 +1471,7 @@ static CFURLRef __CFBundleCopyFrameworkURLForExecutablePath(CFStringRef executab
     }
 #endif
     // * Finally check the executable inside the framework case.
-    if (!bundleURL) {        
+    if (!bundleURL) {
         length = savedLength;
         // To catch all the cases, we just peel off level looking for one ending in .framework or one called "Supporting Files".
         
@@ -1513,10 +1513,10 @@ static CFURLRef __CFBundleCopyFrameworkURLForExecutablePath(CFStringRef executab
     }
     CFStringSetExternalCharactersNoCopy(cheapStr, NULL, 0, 0);
     CFRelease(cheapStr);
-
+    
     return bundleURL;
 }
-        
+
 //SPI version; separated out to minimize linkage changes
 CFURLRef _CFBundleCopyFrameworkURLForExecutablePath(CFStringRef executablePath) {
     return __CFBundleCopyFrameworkURLForExecutablePath(executablePath, false);
@@ -1527,7 +1527,7 @@ static void _CFBundleEnsureBundleExistsForImagePath(CFStringRef imagePath, Boole
     // If an image path corresponds to a bundle, we see if there is already a bundle instance.  If there is and it is NOT in the _dynamicBundles array, it is added to the staticBundles.  Do not add the main bundle to the list here.
     CFBundleRef bundle;
     CFURLRef curURL = __CFBundleCopyFrameworkURLForExecutablePath(imagePath, permissive);
-
+    
     if (curURL) {
         // Ensure bundle exists by creating it if necessary. This will check the tables as a first step.
         // NB doFinalProcessing must be false here, see below
@@ -1536,18 +1536,18 @@ static void _CFBundleEnsureBundleExistsForImagePath(CFStringRef imagePath, Boole
             _CFMutexLock(&(bundle->_bundleLoadingLock));
             if (!bundle->_isLoaded) {
                 // make sure that these bundles listed as loaded, and mark them frameworks (we probably can't see anything else here, and we cannot unload them)
-    #if defined(BINARY_SUPPORT_DLFCN)
+#if defined(BINARY_SUPPORT_DLFCN)
                 if (!bundle->_isLoaded) _CFBundleDlfcnCheckLoaded(bundle);
-    #elif defined(BINARY_SUPPORT_DYLD)
+#elif defined(BINARY_SUPPORT_DYLD)
                 if (!bundle->_isLoaded) _CFBundleDYLDCheckLoaded(bundle);
-    #endif /* BINARY_SUPPORT_DLFCN */
-    #if defined(BINARY_SUPPORT_DYLD)
+#endif /* BINARY_SUPPORT_DLFCN */
+#if defined(BINARY_SUPPORT_DYLD)
                 if (bundle->_binaryType == __CFBundleUnknownBinary) bundle->_binaryType = __CFBundleDYLDFrameworkBinary;
                 if (bundle->_binaryType != __CFBundleCFMBinary && bundle->_binaryType != __CFBundleUnreadableBinary) bundle->_resourceData._executableLacksResourceFork = true;
-    #endif /* BINARY_SUPPORT_DYLD */
-    #if LOG_BUNDLE_LOAD
+#endif /* BINARY_SUPPORT_DYLD */
+#if LOG_BUNDLE_LOAD
                 if (!bundle->_isLoaded) printf("ensure bundle %p set loaded fallback, handle %p image %p conn %p\n", bundle, bundle->_handleCookie, bundle->_imageCookie, bundle->_connectionCookie);
-    #endif /* LOG_BUNDLE_LOAD */
+#endif /* LOG_BUNDLE_LOAD */
                 bundle->_isLoaded = true;
             }
             _CFMutexUnlock(&(bundle->_bundleLoadingLock));
@@ -1591,11 +1591,11 @@ static void _CFBundleEnsureAllBundlesUpToDate(void) {
     CFArrayRef imagePaths = NULL;
     // Tickle the main bundle into existence
     (void)CFBundleGetMainBundle();
-
+    
 #if defined(BINARY_SUPPORT_DLL)
-// Don't know how to find static bundles for DLLs
+    // Don't know how to find static bundles for DLLs
 #endif /* BINARY_SUPPORT_DLL */
-
+    
 #if defined(BINARY_SUPPORT_DYLD)
     imagePaths = _CFBundleDYLDCopyLoadedImagePathsIfChanged();
 #endif /* BINARY_SUPPORT_DYLD */
@@ -1635,7 +1635,7 @@ CFArrayRef CFBundleGetAllBundles(void) {
     _CFMutexUnlock(&CFBundleGlobalDataLock);
     return result;
 }
-        
+
 CF_EXPORT CFArrayRef _CFBundleCopyAllBundles(void) {
     // To answer this properly, we have to have created the static bundles!
     _CFBundleEnsureAllBundlesUpToDate();
@@ -1651,14 +1651,14 @@ CF_EXPORT CFArrayRef _CFBundleCopyAllBundles(void) {
 CF_PRIVATE uint8_t _CFBundleLayoutVersion(CFBundleRef bundle) {
     return bundle->_version;
 }
-     
+
 CF_EXPORT CFURLRef _CFBundleCopyPrivateFrameworksURL(CFBundleRef bundle) {
     return CFBundleCopyPrivateFrameworksURL(bundle);
 }
 
 CF_EXPORT CFURLRef CFBundleCopyPrivateFrameworksURL(CFBundleRef bundle) {
     CFURLRef result = NULL;
-
+    
     if (1 == bundle->_version) {
         result = CFURLCreateWithString(CFGetAllocator(bundle), _CFBundlePrivateFrameworksURLFromBase1, bundle->_url);
     } else if (2 == bundle->_version) {
@@ -1675,7 +1675,7 @@ CF_EXPORT CFURLRef _CFBundleCopySharedFrameworksURL(CFBundleRef bundle) {
 
 CF_EXPORT CFURLRef CFBundleCopySharedFrameworksURL(CFBundleRef bundle) {
     CFURLRef result = NULL;
-
+    
     if (1 == bundle->_version) {
         result = CFURLCreateWithString(CFGetAllocator(bundle), _CFBundleSharedFrameworksURLFromBase1, bundle->_url);
     } else if (2 == bundle->_version) {
@@ -1692,7 +1692,7 @@ CF_EXPORT CFURLRef _CFBundleCopySharedSupportURL(CFBundleRef bundle) {
 
 CF_EXPORT CFURLRef CFBundleCopySharedSupportURL(CFBundleRef bundle) {
     CFURLRef result = NULL;
-
+    
     if (1 == bundle->_version) {
         result = CFURLCreateWithString(CFGetAllocator(bundle), _CFBundleSharedSupportURLFromBase1, bundle->_url);
     } else if (2 == bundle->_version) {
@@ -1709,7 +1709,7 @@ CF_PRIVATE CFURLRef _CFBundleCopyBuiltInPlugInsURL(CFBundleRef bundle) {
 
 CF_EXPORT CFURLRef CFBundleCopyBuiltInPlugInsURL(CFBundleRef bundle) {
     CFURLRef result = NULL, alternateResult = NULL;
-
+    
     CFAllocatorRef alloc = CFGetAllocator(bundle);
     if (1 == bundle->_version) {
         result = CFURLCreateWithString(alloc, _CFBundleBuiltInPlugInsURLFromBase1, bundle->_url);
