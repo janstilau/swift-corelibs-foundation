@@ -719,6 +719,7 @@ extension _JSONEncoder {
         }
     }
     
+    // 专门的 Data 进行 Encode 的方法.
     fileprivate func box(_ data: Data) throws -> NSObject {
         switch self.options.dataEncodingStrategy {
         case .deferredToData:
@@ -801,6 +802,7 @@ extension _JSONEncoder {
     fileprivate func box_(_ value: Encodable) throws -> NSObject? {
         
         let type = Swift.type(of: value)
+        
         // 对于一些特殊的类型, 有着专门的处理方式.
         if type == Date.self {
             // Respect Date encoding strategy
