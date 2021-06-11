@@ -56,22 +56,19 @@ open class JSONEncoder {
         // 传入 Date, Encode 对象, 由闭包规定方法.
         case custom((Date, Encoder) throws -> Void)
     }
+    
+    // 如何将 Data  进行序列化, 这里可以看出, base64 是业界通用的一种行为
     public enum DataEncodingStrategy {
         case deferredToData
         case base64
         case custom((Data, Encoder) throws -> Void)
     }
     
-    
     public enum NonConformingFloatEncodingStrategy {
-        /// Throw upon encountering non-conforming values. This is the default strategy.
         case `throw`
-        
-        /// Encode the values using the given representation strings.
         case convertToString(positiveInfinity: String, negativeInfinity: String, nan: String)
     }
     
-    // Key 如何书写的策略
     public enum KeyEncodingStrategy {
         // 使用原始的 key 值.
         case useDefaultKeys
@@ -84,6 +81,8 @@ open class JSONEncoder {
         /// If the result of the conversion is a duplicate key, then only one value will be present in the result.
         case custom((_ codingPath: [CodingKey]) -> CodingKey)
         
+        // KeyEncodingStrategy 掌管着如何进行 key 到 文件 key 的映射关系.
+        // 那么这个映射关系的时机实现, 就应该在这个类里面.
         fileprivate static func _convertToSnakeCase(_ stringKey: String) -> String {
             guard !stringKey.isEmpty else { return stringKey }
             
@@ -134,7 +133,8 @@ open class JSONEncoder {
         }
     }
     
-    // 这个类, 是启动类. 它并不做任何的直接的编码的工作. 所以, 所有的这些有关实际编码的配置, 最终打包出去, 给实际工作的 _JSONEncoder 来使用.
+    // 这个类, 是启动类. 它并不做任何的直接的编码的工作.
+    // 所有的这些有关实际编码的配置, 最终打包出去, 给实际工作的 _JSONEncoder 来使用.
     open var outputFormatting: OutputFormatting = []
     open var dateEncodingStrategy: DateEncodingStrategy = .deferredToDate
     open var dataEncodingStrategy: DataEncodingStrategy = .base64
@@ -142,7 +142,6 @@ open class JSONEncoder {
     open var keyEncodingStrategy: KeyEncodingStrategy = .useDefaultKeys
     open var userInfo: [CodingUserInfoKey : Any] = [:]
     
-    // 这是一个配置类, 叫做 Options 不太合理. 里面存储的是序列化过程中, 特殊类型的值应该怎么序列化.
     fileprivate struct _Options {
         let dateEncodingStrategy: DateEncodingStrategy
         let dataEncodingStrategy: DataEncodingStrategy
@@ -151,6 +150,7 @@ open class JSONEncoder {
         let userInfo: [CodingUserInfoKey : Any]
     }
     
+    // 一个计算属性, 将由启动类收集好的数据, 打包起来. 传给真正的进行序列化的工具类.
     fileprivate var options: _Options {
         return _Options(dateEncodingStrategy: dateEncodingStrategy,
                         dataEncodingStrategy: dataEncodingStrategy,
@@ -162,10 +162,10 @@ open class JSONEncoder {
     public init() {}
     
     // 开启序列化的任务.
-    // 制造一个 _JSONEncoder 来序列化.
     open func encode<T : Encodable>(_ value: T) throws -> Data {
         // _JSONEncoder 的内部, 将 value, 转变为基本数据类型和 NSArray, NSDictionary, 然后交给 JSONSerialization.data 做最后的序列化的工作.
-        
+            
+        // 实际进行序列化的工具类.
         let encoder = _JSONEncoder(options: self.options)
         
         // topLevel 最后, 会是一个 Dict, 一个 Array, 一个字符串, 或者一个数字. 也就是, JSON 所规定的类型.
@@ -192,16 +192,16 @@ open class JSONEncoder {
  /// A type that can encode values into a native format for external
  /// representation.
  public protocol Encoder {
-
-     var codingPath: [CodingKey] { get }
-     var userInfo: [CodingUserInfoKey : Any] { get }
-        
+ 
+ var codingPath: [CodingKey] { get }
+ var userInfo: [CodingUserInfoKey : Any] { get }
+ 
  public struct KeyedEncodingContainer<K> : KeyedEncodingContainerProtocol where K : CodingKey 
-     func container<Key>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> where Key : CodingKey
+ func container<Key>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> where Key : CodingKey
  public protocol UnkeyedEncodingContainer
-     func unkeyedContainer() -> UnkeyedEncodingContainer
+ func unkeyedContainer() -> UnkeyedEncodingContainer
  public protocol SingleValueEncodingContainer
-     func singleValueContainer() -> SingleValueEncodingContainer
+ func singleValueContainer() -> SingleValueEncodingContainer
  }
  */
 
@@ -322,7 +322,6 @@ fileprivate struct _JSONEncodingStorage {
     }
     
     fileprivate mutating func popContainer() -> NSObject {
-        precondition(!self.containers.isEmpty, "Empty container stack.")
         return self.containers.popLast()!
     }
 }
@@ -371,7 +370,7 @@ fileprivate struct _JSONKeyedEncodingContainer<K : CodingKey> : KeyedEncodingCon
     
     // KeyValue cotatiner 对于 enocde 各种方法的实现.
     
-
+    
     // 因为 _JSONEncoder 是 Single Encoder, 所以, 各种值是用 self.encoder 进行的编码工作.
     // 之所以, Codingkey 可以充当 name, 就是因为这里, 显示的将它们转化成为了 stringValue.
     public mutating func encodeNil(forKey key: Key)               throws { self.container[_converted(key).stringValue._bridgeToObjectiveC()] = NSNull() }
@@ -798,6 +797,7 @@ extension _JSONEncoder {
     }
     
     // 各个类型, 需要实现 Codable 的原因在这里.
+    // 这里是真正的进行序列化操作的代码.
     fileprivate func box_(_ value: Encodable) throws -> NSObject? {
         
         let type = Swift.type(of: value)
@@ -1248,7 +1248,7 @@ fileprivate struct _JSONKeyedDecodingContainer<K : CodingKey> : KeyedDecodingCon
      OC 里面, 也是这样做的, 不过是 OC 里面, Type 的得到, 是根据 Runtime.
      
      最终, 还是到了单个值的 Unbox 里面.
-    */
+     */
     public func decodeNil(forKey key: Key) throws -> Bool {
         guard let entry = self.container[key.stringValue] else {
             throw DecodingError.keyNotFound(key, DecodingError.Context(codingPath: self.decoder.codingPath, debugDescription: "No value associated with key \(_errorDescription(of: key))."))
